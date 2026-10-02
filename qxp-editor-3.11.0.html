@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qxiiphoto 姿势编辑器</title>
+<style>
+  /* ============================================================
+     Spline 风格（按 spline.design 的设计规范）：
+     · 纯黑"虚空"底，层次全靠半透明白叠加 —— 不用实心描边、不用投影
+     · 圆角只有三档：12 / 24 / 胶囊
+     · 字重不超过 500，层级靠字号与透明度
+     · 饱和色只有主按钮的 Spline 蓝 #0062ff；粉/紫只作为视口里的柔光
+     ============================================================ */
+  :root{
+    --void:#030305;                          /* 全局背景 */
+    --glass:rgba(255,255,255,.055);          /* 大容器（顶栏 / 面板） */
+    --glass-2:rgba(20,20,24,.78);            /* 浮层（弹窗 / 提示） */
+    --surf:rgba(255,255,255,.13);            /* 可交互表面（按钮） */
+    --surf-hi:rgba(255,255,255,.22);         /* hover / 选中 */
+    --surf-lo:rgba(255,255,255,.07);         /* 输入框 */
+    --hair:rgba(255,255,255,.07);            /* 极淡分隔线 */
+    --sheen:inset 0 1px 0 rgba(255,255,255,.07);      /* 顶部高光：用"发出的光"做层次 */
+    --ring:inset 0 0 0 1px rgba(255,255,255,.24);     /* 选中时的白色内描边 */
+    --txt:#fff; --txt-dim:rgba(255,255,255,.7); --txt-faint:rgba(255,255,255,.45);
+    --blue:#0062ff; --blue-hi:#2a7bff; --glow:0 6px 22px rgba(0,98,255,.35);
+    --ok:#3ddc97; --err:#ff6b6b;
+    --axis-x:#ff6b6b; --axis-y:#7ee081; --axis-z:#6ea8ff;
+    --r-s:10px; --r-m:12px; --r-l:24px; --pill:999px;
+    --blur:saturate(140%) blur(22px);
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--void);color:var(--txt);
+    font-family:"Spline Sans",Inter,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    font-size:12px;line-height:1.45;font-weight:400;user-select:none;-webkit-font-smoothing:antialiased}
+  /* 视口：透明的 WebGL 画布叠在"虚空柔光"上（蓝 + 紫，只作为光，不作为 UI 颜色） */
+  #view{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:default;z-index:0;
+    background:
+      radial-gradient(46% 38% at 38% 40%, rgba(0,98,255,.16), rgba(0,98,255,0) 70%),
+      radial-gradient(38% 32% at 68% 66%, rgba(168,85,247,.11), rgba(168,85,247,0) 72%),
+      var(--void)}
+
+  /* —— 顶栏：悬浮玻璃条 —— */
+  #topbar{position:absolute;z-index:20;top:12px;left:12px;right:12px;height:46px;display:flex;
+    justify-content:space-between;align-items:center;padding:0 10px;border-radius:var(--r-l);
+    background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    box-shadow:var(--sheen)}
+  #topbar .grp{display:flex;gap:8px;align-items:center;min-width:0}
+  .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex:none;transition:background .2s}
+  .dot.on{background:var(--ok);box-shadow:0 0 10px rgba(61,220,151,.7)}
+  .state{font-size:11px;color:var(--txt-dim);font-family:var(--mono);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* —— 右侧属性面板：悬浮玻璃卡片 —— */
+  #panel{position:absolute;z-index:20;top:70px;right:12px;bottom:12px;width:300px;overflow-y:auto;
+    background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    border-radius:var(--r-l);box-shadow:var(--sheen);padding:14px 12px 16px}
+  #panel::-webkit-scrollbar{width:8px}
+  #panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:var(--pill)}
+  #panel::-webkit-scrollbar-track{background:transparent}
+  #panel h2{margin:16px 0 8px;padding-top:14px;border-top:1px solid var(--hair);
+    font-size:10px;color:var(--txt-faint);font-weight:500;letter-spacing:.14em}
+  #panel h2:first-of-type{margin-top:0;padding-top:0;border-top:none}
+  .sec{margin-top:16px;padding-top:12px;border-top:1px solid var(--hair)}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+
+  /* —— 按钮：半透明白填充，无描边；只有主按钮用 Spline 蓝 —— */
+  button{background:var(--surf);color:var(--txt);border:0;border-radius:var(--r-m);
+    padding:7px 11px;cursor:pointer;font-size:11.5px;font-weight:500;font-family:inherit;flex:1;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;
+    box-shadow:var(--sheen);transition:background .14s ease,box-shadow .14s ease,transform .06s ease}
+  button:hover{background:var(--surf-hi)}
+  button:active{transform:scale(.985)}
+  button.sel{background:var(--surf-hi);box-shadow:var(--ring)}
+  button.pri{background:var(--blue);color:#fff;box-shadow:var(--glow)}
+  button.pri:hover{background:var(--blue-hi)}
+  .ic{width:13px;height:13px;flex:none;stroke:currentColor;stroke-width:1.6;fill:none;
+    stroke-linecap:round;stroke-linejoin:round}
+
+  /* —— 临时缓存条目：胶囊 —— */
+  .chip{display:inline-flex;align-items:center;gap:2px;flex:1 0 46%;min-width:0}
+  .chip .cname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;justify-content:flex-start;
+    padding:7px 13px;border-radius:var(--pill)}
+  .chip .cmini{flex:none;width:30px;height:30px;padding:0;border-radius:var(--pill);color:var(--txt-dim)}
+  .chip .cmini:hover{color:#fff}
+  .chip.sel .cname{background:var(--surf-hi);box-shadow:var(--ring)}
+  /* 待删除态（点两次才真删，不用原生 confirm） */
+  .chip.danger .cname{background:rgba(255,107,107,.16);color:#ff9b9b;box-shadow:none}
+  .chip.danger .cmini{color:#ff9b9b}
+  /* 缓存命名输入框（不用原生 prompt：部分内嵌浏览器不支持） */
+  #slotName{flex:1;min-width:0;background:var(--surf-lo);border:0;color:#fff;border-radius:var(--pill);
+    padding:7px 13px;font-size:11.5px;font-family:inherit;box-shadow:var(--sheen);
+    transition:background .14s ease,box-shadow .14s ease}
+  #slotName:focus{outline:none;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(0,98,255,.65)}
+  #slotName::placeholder{color:var(--txt-faint)}
+
+  /* —— 滑块与数值框 —— */
+  .sl{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .sl label{width:46px;color:var(--txt-dim);font-size:11px;flex:none}
+  .sl input[type=range]{flex:1;min-width:0;height:16px;-webkit-appearance:none;appearance:none;
+    background:none;--fill:0%}
+  .sl input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:var(--pill);
+    background:linear-gradient(to right,var(--blue) 0 var(--fill),rgba(255,255,255,.14) var(--fill) 100%)}
+  .sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;
+    background:#fff;border-radius:50%;box-shadow:0 0 0 5px rgba(255,255,255,.07)}
+  .sl input[type=range]::-moz-range-track{height:4px;border-radius:var(--pill);background:rgba(255,255,255,.14)}
+  .sl input[type=range]::-moz-range-progress{height:4px;border-radius:var(--pill);background:var(--blue)}
+  .sl input[type=range]::-moz-range-thumb{width:14px;height:14px;background:#fff;border:0;border-radius:50%}
+  .sl input[type=number]{width:58px;background:var(--surf-lo);border:0;color:#fff;border-radius:var(--r-s);
+    padding:5px 8px;font-size:11px;font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;
+    box-shadow:var(--sheen)}
+  .sl input[type=number]:focus{outline:none;box-shadow:inset 0 0 0 1px rgba(0,98,255,.65)}
+
+  .note{color:var(--txt-faint);font-size:10.5px;line-height:1.6}
+  kbd{display:inline-block;min-width:16px;padding:1px 6px;border-radius:var(--pill);
+    background:rgba(255,255,255,.12);color:var(--txt-dim);font-size:9.5px;font-family:var(--mono);text-align:center}
+
+  #readout{position:absolute;z-index:20;left:50%;top:74px;transform:translateX(-50%);display:none;
+    background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    border-radius:var(--pill);padding:7px 15px;box-shadow:var(--sheen);
+    font-size:11.5px;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--blue-hi)}
+  #skinPrev{width:100%;height:auto;image-rendering:pixelated;border-radius:var(--r-m);
+    background:rgba(255,255,255,.05);display:block;margin:8px 0;box-shadow:var(--sheen)}
+  /* 粘贴导入弹窗 */
+  #pasteWrap{position:absolute;z-index:60;inset:0;display:none;background:rgba(0,0,0,.62);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #pasteBox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,86vw);
+    background:var(--glass-2);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    border-radius:var(--r-l);box-shadow:var(--sheen);padding:18px}
+  #pasteBox h3{margin:0 0 10px;font-size:13px;font-weight:500;color:#fff}
+  #pasteArea{width:100%;height:190px;background:var(--surf-lo);border:0;border-radius:var(--r-m);
+    color:#fff;font-family:var(--mono);font-size:11.5px;line-height:1.6;padding:10px;resize:vertical;
+    box-shadow:var(--sheen)}
+  #pasteArea:focus{outline:none;box-shadow:inset 0 0 0 1px rgba(0,98,255,.65)}
+  /* 提示条 */
+  #toast{position:absolute;z-index:50;left:50%;bottom:64px;transform:translateX(-50%);display:none;
+    background:var(--glass-2);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    border-radius:var(--r-l);padding:11px 16px;max-width:520px;line-height:1.6;font-size:11.5px;
+    white-space:pre-wrap;box-shadow:var(--sheen),0 18px 40px rgba(0,0,0,.55)}
+  /* 底部操作提示：悬浮胶囊 */
+  #hint{position:absolute;z-index:20;left:12px;right:324px;bottom:12px;height:36px;display:flex;align-items:center;
+    gap:14px;padding:0 16px;border-radius:var(--pill);background:var(--glass);
+    backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+    color:var(--txt-faint);font-size:10.5px;box-shadow:var(--sheen);overflow:hidden;white-space:nowrap}
+  #hint b{color:var(--txt);font-weight:500}
+  .ax-x{color:var(--axis-x)}.ax-y{color:var(--axis-y)}.ax-z{color:var(--axis-z)}
+  .hi{color:var(--blue-hi)}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="ic-check" viewBox="0 0 16 16"><path d="M3 8.6l3.1 3.1L13 5"/></symbol>
+  <symbol id="ic-off" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="ic-undo" viewBox="0 0 16 16"><path d="M6 4L3 7l3 3"/><path d="M3 7h6.5a3 3 0 010 6H8"/></symbol>
+  <symbol id="ic-redo" viewBox="0 0 16 16"><path d="M10 4l3 3-3 3"/><path d="M13 7H6.5a3 3 0 000 6H8"/></symbol>
+  <symbol id="ic-move" viewBox="0 0 16 16"><path d="M8 2.5v11M2.5 8h11"/><path d="M8 2.5L6.6 4.2M8 2.5l1.4 1.7M8 13.5l-1.4-1.7M8 13.5l1.4-1.7M2.5 8l1.7-1.4M2.5 8l1.7 1.4M13.5 8l-1.7-1.4M13.5 8l-1.7 1.4"/></symbol>
+  <symbol id="ic-rotate" viewBox="0 0 16 16"><path d="M13.2 8a5.2 5.2 0 11-1.9-4"/><path d="M13.5 2.2v3.2h-3.2"/></symbol>
+  <symbol id="ic-focus" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.6"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8"/></symbol>
+  <symbol id="ic-mirror" viewBox="0 0 16 16"><path d="M8 2v12"/><path d="M6.2 4.6L3 8l3.2 3.4zM9.8 4.6L13 8l-3.2 3.4z"/></symbol>
+  <symbol id="ic-grid" viewBox="0 0 16 16"><path d="M2.5 6h11M2.5 10h11M6 2.5v11M10 2.5v11"/></symbol>
+  <symbol id="ic-skin" viewBox="0 0 16 16"><path d="M3 13.2l.9-3.2L11.2 2.7l2.1 2.1L6.2 12.3z"/><path d="M9.6 4.3l2.1 2.1"/></symbol>
+  <symbol id="ic-folder" viewBox="0 0 16 16"><path d="M2.2 4.6h4l1.4 1.9h6.2v6.9H2.2z"/></symbol>
+  <symbol id="ic-save" viewBox="0 0 16 16"><path d="M3 2.6h7.6L13.4 5.4v8H3z"/><path d="M6 2.6v3.9h4V2.6M6 13.4v-3.1h4v3.1"/></symbol>
+  <symbol id="ic-copy" viewBox="0 0 16 16"><path d="M5.6 5.6h8v8h-8z"/><path d="M10.4 2.4h-8v8"/></symbol>
+  <symbol id="ic-import" viewBox="0 0 16 16"><path d="M8 2.4v7"/><path d="M5.6 6.9L8 9.3l2.4-2.4"/><path d="M2.6 12.4h10.8"/></symbol>
+  <symbol id="ic-person" viewBox="0 0 16 16"><circle cx="8" cy="5.2" r="2.4"/><path d="M3.4 13.4c0-2.4 2.1-3.9 4.6-3.9s4.6 1.5 4.6 3.9"/></symbol>
+</svg>
+<div id="topbar">
+  <div class="grp">
+    <span class="dot" id="led"></span>
+    <button class="pri" id="btnUse" style="flex:none"><svg class="ic"><use href="#ic-check"/></svg>使用（应用到游戏）</button>
+    <span class="state" id="stateTxt">未连接资源包文件夹</span>
+  </div>
+  <div class="grp">
+    <button id="btnOff" style="flex:none"><svg class="ic"><use href="#ic-off"/></svg>关闭模型</button>
+  </div>
+</div>
+
+<div id="panel">
+  <h2>部件</h2>
+  <div class="row" id="partRow"></div>
+
+  <h2>模式</h2>
+  <div class="row">
+    <button id="modeT" class="sel">平移 <kbd>W</kbd></button>
+    <button id="modeR">旋转 <kbd>E</kbd></button>
+  </div>
+  <div class="note">在视口里直接拖 <span class="ax-x">红</span>/<span class="ax-y">绿</span>/<span class="ax-z">蓝</span> 手柄 · 按住 <kbd>Ctrl</kbd> 吸附</div>
+
+    <h2 id="slTitle">平移数值（像素）</h2>
+  <div id="sliders"></div>
+  <div class="note" id="axisNote"></div>
+
+    <div class="row">
+    <button id="btnResetPart">重置本部件</button>
+    <button id="btnResetAll">全部归零</button>
+  </div>
+  <div class="row">
+    <button id="btnUndo"><svg class="ic"><use href="#ic-undo"/></svg>撤销 <kbd>Ctrl+Z</kbd></button>
+    <button id="btnRedo"><svg class="ic"><use href="#ic-redo"/></svg>重做 <kbd>Ctrl+Y</kbd></button>
+  </div>
+  <div class="row">
+    <button id="btnMirror"><svg class="ic"><use href="#ic-mirror"/></svg>左右镜像</button>
+    <button id="btnFocus"><svg class="ic"><use href="#ic-focus"/></svg>聚焦选中 <kbd>F</kbd></button>
+  </div>
+  <div class="row">
+    <button id="btnCamReset">复位视角</button>
+    <button id="btnGrid"><svg class="ic"><use href="#ic-grid"/></svg>地面网格</button>
+  </div>
+
+    <h2>贴图（皮肤）</h2>
+  <div class="row">
+    <button id="btnSkin"><svg class="ic"><use href="#ic-skin"/></svg>导入皮肤 PNG</button>
+    <button id="btnOverlay" class="sel">显示外层</button>
+  </div>
+  <div class="row">
+    <button id="btnSlim" class="sel">模型：细臂（Alex）</button>
+  </div>
+  <canvas id="skinPrev" width="160" height="160"></canvas>
+  <div class="note" id="skinNote">绿框＝当前选中部件用到的贴图区域 · 也可直接把 PNG 拖进窗口</div>
+  <input type="file" id="fileSkin" accept="image/png" style="display:none">
+
+    <h2 id="packTitle">资源包（没装 mod 时的备用路线）</h2>
+  <div class="row">
+    <button id="btnConnect"><svg class="ic"><use href="#ic-folder"/></svg>连接游戏资源包文件夹</button>
+  </div>
+  <div class="row">
+    <button id="btnAuto">自动同步：关</button>
+  </div>
+  <div class="row">
+    <button id="btnExport"><svg class="ic"><use href="#ic-save"/></svg>导出资源包 .zip</button>
+    <button id="btnExportPose">导出姿势 JSON</button>
+  </div>
+  <div class="note" id="packNote">装了「Qxiiphoto 姿势包」mod 时：改完立刻在游戏里生效，这几项用不上。</div>
+  <div class="row">
+    <button id="btnPaste"><svg class="ic"><use href="#ic-import"/></svg>粘贴姿势</button>
+  </div>
+  <div class="row">
+    <button id="btnImportPose"><svg class="ic"><use href="#ic-import"/></svg>导入姿势 JSON</button>
+    <button id="btnCopy"><svg class="ic"><use href="#ic-copy"/></svg>复制姿势表达式</button>
+  </div>
+  <input type="file" id="filePose" accept=".json,application/json" style="display:none">
+
+    <h2 id="slotTitle">临时缓存</h2>
+  <div class="row" id="slotRow"></div>
+  <div class="row">
+    <input id="slotName" type="text" maxlength="16" placeholder="缓存名称（留空自动命名）">
+    <button id="btnSaveSlot" style="flex:none"><svg class="ic"><use href="#ic-save"/></svg>存为缓存</button>
+  </div>
+  <div class="note" id="slotNote">点名字＝应用并启用 · ⟳＝用当前姿势覆盖 · ×＝删除</div>
+</div>
+
+<div id="hint"><b>左键点模型</b>＝选中　<b>拖手柄</b>＝变换　<b>拖空白</b>＝平移视角　<b>右键拖</b>＝转视角　<b>滚轮</b>＝缩放　<kbd>Ctrl</kbd>＝吸附　<kbd>W</kbd>/<kbd>E</kbd>＝平移/旋转　<kbd>F</kbd>＝聚焦</div>
+<div id="readout"></div>
+<div id="pasteWrap">
+  <div id="pasteBox">
+    <h3>粘贴姿势</h3>
+    <textarea id="pasteArea" spellcheck="false" placeholder="支持以下任意格式（也可以整段粘贴 .jpm 文件内容）：&#10;&#10;var.qxp_head_rx = torad(30)&#10;head.rx = 30&#10;right_arm.rx = -70&#10;body.ty = -2"></textarea>
+    <div class="row" style="margin:8px 0 0">
+      <button id="btnPasteOk" class="pri">导入</button>
+      <button id="btnPasteCancel">取消</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* 编辑器版本：显示在标题和状态栏里 —— 用来一眼确认浏览器加载的是不是最新页面 */
+const EDITOR_VERSION = "3.11.0";
+/* 内置默认皮肤（64×64·细臂 Alex 模型专用）——在编辑器里导入新皮肤会覆盖本机缓存 */
+const DEFAULT_SKIN = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADQElEQVR4AexaO2sVQRQ+exuFpFIwF66IouJfSK+1hdql8heIjypYWEg6/Q8WFzsrSwXL/AAbQfGBF27E0mBs3ORb8sHJ5OzO7CPZ11z4OGfueeycb04xs7MT8fzefvyeFuHu/SdpETzpWzd7CcAM169dFAty+JutTcXCobnTIoiATldQc3KRgJoE9j48dkDvl7BmAUEdsP35p1jgsxc7S7FAe5fl5ObyRVqE18vzUoRX189JEfa+PEqL0DY5WQesr10QC5zc5emKWKB95colsUD7mdkNsUB7mzIjoM0JtP3sIALuzEQAThY6wHGfZRABfS7QN/cgAt4sRAAmgw5w3GcZRECfC/TNPSNge+eXWGDwt+WuWKB99+sPsUD7v8UnsUD7aUr3WZP308eJxsPf90Rjb/5MNOa3VhON1c3NROPD7Q3RePf3gWhsPJ+IhvsuwZ2gO9bvJnSs6xc6zjrAdebZn//zrM+xTzLelYxjPlfS7pPISx/koF5FmgRUSdTXGJMA7vtZFPf5HPsk413JOOZzJe0+ibz0QQ7qVeSxs4C773f3+e6+3j1HuPHu2M03f/pfNMrk17n+bG0dOXOEkpF1AM8BDOK+n2Pu8znmvp7jvHjmoaR/Xj7mpaS/lZ82KxdtITIjIMRxqD6RgKGubGhdsQNCmRqqX+yAoa5saF2xA0KZGqpf1gF8F8AiefbnmGd9jnm25zgvnnko6Z+Xj3kp6W/lp83KRRukD8feB+izPnR91od+9urLREO/S4COmCIgh4bOZenIqaFz6zzQdbyvcNqzDuBgjDISMMZV1zXHDtBsjFGPHTDGVdc1xw7QbIxRjx0wxlXXNccO0GyMUY8dMLRVL1tP4x2g7++h6zt86L4JIoaAP+GLq2pvnABMBPf3AHQAd/gA9BC4sSExVX1OhICqk2kj7kQIwP09wIJwhw9w7JNurM+/jr02Ab7vA/QdPvTTvv/3kVObADzAur/HNwGwAdYdPr4BgA2w4vE/YMXi/6bQCAFNTaaNPJGANljv0jNjB3RpNZqYS3rwK5NncB2QHPxGTUCZ4uE7uA5AUWUQCSjDVp6vdX+PbwLob93h4xsA2q142qxY2iDrYh8AAP//ZG1/BwAAAAZJREFUAwB5sAqOleQ8xQAAAABJRU5ErkJggg==";
+/* =========================================================================
+   1. 模型数据：原版玩家模型（y 向下，原点在颈部，单位=像素）
+   ========================================================================= */
+// box = [x, y, z, w, h, d]，pivot = 旋转轴心，uv = 皮肤贴图偏移
+const PARTS = [
+  {id:"head",        bone:"head",      pivot:[0,0,0],        box:[-4,-8,-4, 8,8,8],   uv:[0,0],   dil:0,    mirror:false, overlay:false},
+  {id:"headwear",    bone:"head",      pivot:[0,0,0],        box:[-4,-8,-4, 8,8,8],   uv:[32,0],  dil:0.5,  mirror:false, overlay:true},
+  {id:"body",        bone:"body",      pivot:[0,0,0],        box:[-4,0,-2, 8,12,4],   uv:[16,16], dil:0,    mirror:false, overlay:false},
+  {id:"jacket",      bone:"body",      pivot:[0,0,0],        box:[-4,0,-2, 8,12,4],   uv:[16,32], dil:0.25, mirror:false, overlay:true},
+  {id:"right_arm",   bone:"right_arm", pivot:[-5,2,0],       box:[-8,0,-2, 4,12,4],   uv:[40,16], dil:0,    mirror:false, overlay:false},
+  {id:"right_sleeve",bone:"right_arm", pivot:[-5,2,0],       box:[-8,0,-2, 4,12,4],   uv:[40,32], dil:0.25, mirror:false, overlay:true},
+  {id:"left_arm",    bone:"left_arm",  pivot:[5,2,0],        box:[4,0,-2, 4,12,4],    uv:[32,48], dil:0,    mirror:true,  overlay:false},
+  {id:"left_sleeve", bone:"left_arm",  pivot:[5,2,0],        box:[4,0,-2, 4,12,4],    uv:[48,48], dil:0.25, mirror:true,  overlay:true},
+  {id:"right_leg",   bone:"right_leg", pivot:[-1.9,12,0],    box:[-4,12,-2, 4,12,4],  uv:[0,16],  dil:0,    mirror:false, overlay:false},
+  {id:"right_pants", bone:"right_leg", pivot:[-1.9,12,0],    box:[-4,12,-2, 4,12,4],  uv:[0,32],  dil:0.25, mirror:false, overlay:true},
+  {id:"left_leg",    bone:"left_leg",  pivot:[1.9,12,0],     box:[0,12,-2, 4,12,4],   uv:[16,48], dil:0,    mirror:true,  overlay:false},
+  {id:"left_pants",  bone:"left_leg",  pivot:[1.9,12,0],     box:[0,12,-2, 4,12,4],   uv:[0,48],  dil:0.25, mirror:true,  overlay:true},
+];
+// 细臂（Alex）模型：手臂/袖子宽度 4 → 3（外侧边缘向内收，内侧贴身体）
+const SLIM_ARM = {right_arm:1, right_sleeve:1, left_arm:1, left_sleeve:1};
+function partBox(p, slim){
+  const b = p.box.slice();
+  if (slim && SLIM_ARM[p.id]){ b[3] = 3; b[0] = p.mirror ? 4 : -7; }
+  return b;
+}
+
+const BONES = ["head","body","right_arm","left_arm","right_leg","left_leg"];
+const LABEL = {head:"头部", body:"身体", right_arm:"右手", left_arm:"左手", right_leg:"右腿", left_leg:"左腿"};
+const AXES  = ["rx","ry","rz","tx","ty","tz"];
+const AXIS_LABEL = {rx:"俯仰 X", ry:"偏航 Y", rz:"翻滚 Z", tx:"左右 X", ty:"上下 Y", tz:"前后 Z"};
+
+/* =========================================================================
+   2. 立方体 → 三角面（MC 标准 UV 展开）
+   面矩形： 上(u+d,v) 下(u+d+w,v) | 右(u,v+d) 前(u+d,v+d) 左(u+d+w,v+d) 后(u+2d+w,v+d)
+   方向：   前 +u→+x +v→+y ｜ 后 +u→-x ｜ 侧 +v→+y ｜ 上 +v→-z ｜ 下 +u→-x +v→+z
+   镜像：   左右两个侧面矩形互换（其余面不翻转），与原版 mirror 一致
+   ========================================================================= */
+const FACE_ORDER = [[0,1,2],[0,2,3]]; // 四边形 → 两个三角形
+
+// 一个方块 6 个面的几何 + 贴图矩形（编辑器内部坐标，y 向下）
+function boxFaceList(box, uv, dil, mirror){
+  const [bx,by,bz,bw,bh,bd] = box, d = dil;
+  const X0=bx-d, X1=bx+bw+d, Y0=by-d, Y1=by+bh+d, Z0=bz-d, Z1=bz+bd+d;
+  const u=uv[0], v=uv[1], W=bw, H=bh, D=bd;
+  const rectX0 = mirror ? [u+D+W, v+D, D, H] : [u, v+D, D, H];
+  const rectX1 = mirror ? [u, v+D, D, H]     : [u+D+W, v+D, D, H];
+  return [
+    {name:"front",  O:[X0,Y0,Z0], du:[1,0,0],  dv:[0,1,0],  su:W, sv:H, rect:[u+D, v+D, W, H]},
+    {name:"back",   O:[X1,Y0,Z1], du:[-1,0,0], dv:[0,1,0],  su:W, sv:H, rect:[u+2*D+W, v+D, W, H]},
+    {name:"left",   O:[X0,Y0,Z1], du:[0,0,-1], dv:[0,1,0],  su:D, sv:H, rect:rectX0},
+    {name:"right",  O:[X1,Y0,Z0], du:[0,0,1],  dv:[0,1,0],  su:D, sv:H, rect:rectX1},
+    {name:"top",    O:[X0,Y0,Z1], du:[1,0,0],  dv:[0,0,-1], su:W, sv:D, rect:[u+D, v, W, D]},
+    {name:"bottom", O:[X1,Y1,Z0], du:[-1,0,0], dv:[0,0,1],  su:W, sv:D, rect:[u+D+W, v, W, D]},
+  ];
+}
+
+function pushFace(o, f, texSize){
+  const {O, du, dv, su, sv, rect} = f;
+  const P = [
+    O,
+    [O[0]+du[0]*su, O[1]+du[1]*su, O[2]+du[2]*su],
+    [O[0]+du[0]*su+dv[0]*sv, O[1]+du[1]*su+dv[1]*sv, O[2]+du[2]*su+dv[2]*sv],
+    [O[0]+dv[0]*sv, O[1]+dv[1]*sv, O[2]+dv[2]*sv],
+  ];
+  // 法线 = dv × du（朝外；y 轴向下，所以“上”面法线是 (0,-1,0)）
+  const n = [dv[1]*du[2]-dv[2]*du[1], dv[2]*du[0]-dv[0]*du[2], dv[0]*du[1]-dv[1]*du[0]];
+  // UV 向内收缩半个贴图元：采样落在元胞中心而不是边界，
+  // 否则边缘像素会插值到相邻面区域的贴图元，看起来就是"贴图有缝隙/错色线"
+  const U = [rect[0]+0.5, rect[0]+rect[2]-0.5, rect[0]+rect[2]-0.5, rect[0]+0.5];
+  const V = [rect[1]+0.5, rect[1]+0.5, rect[1]+rect[3]-0.5, rect[1]+rect[3]-0.5];
+  const tx = texSize[0], ty = texSize[1];
+  for (const [a,b,c] of FACE_ORDER){
+    for (const i of [a,b,c]){
+      o.v.push(P[i][0], P[i][1], P[i][2], n[0], n[1], n[2], U[i]/tx, V[i]/ty);
+    }
+  }
+}
+
+function buildMesh(slim, texSize){
+  const meshes = {};
+  for (const p of PARTS){
+    const o = {v:[]};
+    for (const f of boxFaceList(partBox(p, slim), p.uv, p.dil, p.mirror)) pushFace(o, f, texSize);
+    meshes[p.id] = o.v;
+  }
+  return meshes;
+}
+
+/* =========================================================================
+   3. 4x4 矩阵工具（列主序）
+   ========================================================================= */
+const M4 = {
+  ident: () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+  mul(a,b,out){ // out = a*b
+    out = out || new Float32Array(16);
+    for (let c=0;c<4;c++){
+      for (let r=0;r<4;r++){
+        out[c*4+r] = a[0*4+r]*b[c*4+0] + a[1*4+r]*b[c*4+1] + a[2*4+r]*b[c*4+2] + a[3*4+r]*b[c*4+3];
+      }
+    }
+    return out;
+  },
+  trans(x,y,z){ const m=M4.ident(); m[12]=x; m[13]=y; m[14]=z; return m; },
+  scale(x,y,z){ const m=M4.ident(); m[0]=x; m[5]=y; m[10]=z; return m; },
+  rotX(a){ const c=Math.cos(a), s=Math.sin(a), m=M4.ident(); m[5]=c; m[6]=s; m[9]=-s; m[10]=c; return m; },
+  rotY(a){ const c=Math.cos(a), s=Math.sin(a), m=M4.ident(); m[0]=c; m[2]=-s; m[8]=s; m[10]=c; return m; },
+  rotZ(a){ const c=Math.cos(a), s=Math.sin(a), m=M4.ident(); m[0]=c; m[1]=s; m[4]=-s; m[5]=c; return m; },
+  persp(fovy, asp, near, far){
+    const f = 1/Math.tan(fovy/2), nf = 1/(near-far), m = new Float32Array(16);
+    m[0]=f/asp; m[5]=f; m[10]=(far+near)*nf; m[11]=-1; m[14]=2*far*near*nf; return m;
+  },
+  lookAt(eye, ctr, up){
+    let z=[eye[0]-ctr[0], eye[1]-ctr[1], eye[2]-ctr[2]];
+    let l=Math.hypot(...z); z=z.map(v=>v/l);
+    let x=[up[1]*z[2]-up[2]*z[1], up[2]*z[0]-up[0]*z[2], up[0]*z[1]-up[1]*z[0]];
+    l=Math.hypot(...x); if(l<1e-6){x=[1,0,0];} else x=x.map(v=>v/l);
+    let y=[z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+    const m = new Float32Array(16);
+    m[0]=x[0]; m[4]=x[1]; m[8]=x[2];
+    m[1]=y[0]; m[5]=y[1]; m[9]=y[2];
+    m[2]=z[0]; m[6]=z[1]; m[10]=z[2];
+    m[12]=-(x[0]*eye[0]+x[1]*eye[1]+x[2]*eye[2]);
+    m[13]=-(y[0]*eye[0]+y[1]*eye[1]+y[2]*eye[2]);
+    m[14]=-(z[0]*eye[0]+z[1]*eye[1]+z[2]*eye[2]);
+    m[15]=1;
+    return m;
+  },
+  // 通用 4x4 求逆（列主序，gl-matrix 同款算法）
+  invert(a){
+    const o = new Float32Array(16);
+    const a00=a[0],a01=a[1],a02=a[2],a03=a[3], a10=a[4],a11=a[5],a12=a[6],a13=a[7],
+          a20=a[8],a21=a[9],a22=a[10],a23=a[11], a30=a[12],a31=a[13],a32=a[14],a33=a[15];
+    const b00=a00*a11-a01*a10, b01=a00*a12-a02*a10, b02=a00*a13-a03*a10, b03=a01*a12-a02*a11,
+          b04=a01*a13-a03*a11, b05=a02*a13-a03*a12, b06=a20*a31-a21*a30, b07=a20*a32-a22*a30,
+          b08=a20*a33-a23*a30, b09=a21*a32-a22*a31, b10=a21*a33-a23*a31, b11=a22*a33-a23*a32;
+    let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+    if (!det) return M4.ident();
+    det = 1/det;
+    o[0]=(a11*b11-a12*b10+a13*b09)*det;  o[1]=(a02*b10-a01*b11-a03*b09)*det;
+    o[2]=(a31*b05-a32*b04+a33*b03)*det;  o[3]=(a22*b04-a21*b05-a23*b03)*det;
+    o[4]=(a12*b08-a10*b11-a13*b07)*det;  o[5]=(a00*b11-a02*b08+a03*b07)*det;
+    o[6]=(a32*b02-a30*b05-a33*b01)*det;  o[7]=(a20*b05-a22*b02+a23*b01)*det;
+    o[8]=(a10*b10-a11*b08+a13*b06)*det;  o[9]=(a01*b08-a00*b10-a03*b06)*det;
+    o[10]=(a30*b04-a31*b02+a33*b00)*det; o[11]=(a21*b02-a20*b04-a23*b00)*det;
+    o[12]=(a11*b07-a10*b09-a12*b06)*det; o[13]=(a00*b09-a01*b07+a02*b06)*det;
+    o[14]=(a31*b01-a30*b03-a32*b00)*det; o[15]=(a20*b03-a21*b01+a22*b00)*det;
+    return o;
+  },
+  apply(m,p){ return [
+    m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12],
+    m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13],
+    m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14],
+  ]; },
+  applyDir(m,p){ return [
+    m[0]*p[0]+m[4]*p[1]+m[8]*p[2],
+    m[1]*p[0]+m[5]*p[1]+m[9]*p[2],
+    m[2]*p[0]+m[6]*p[1]+m[10]*p[2],
+  ]; }
+};
+
+/* 三维向量小工具 */
+const V3 = {
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+  sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  mul:(a,s)=>[a[0]*s,a[1]*s,a[2]*s],
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+  dist:(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]),
+  norm:a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; },
+};
+
+/* =========================================================================
+   4. 姿势状态
+   ========================================================================= */
+const ZERO = () => ({rx:0,ry:0,rz:0,tx:0,ty:0,tz:0});
+let pose = {}; BONES.forEach(b => pose[b] = ZERO());
+/* 模型总开关：关闭＝暂时用回原版模型，数值原样保留（不是清零）—— 再点「启用模型」就恢复 */
+let poseEnabled = true;
+let selPart = "head", mode = "translate";
+let showOverlay = true, slim = true, showGrid = true;   // 默认 Alex（细臂）
+const LIMIT = {t:24, r:180};
+
+function partTransform(bone){
+  const p = pose[bone], piv = PARTS.find(x=>x.id===bone).pivot;
+  // T(pivot+t) · Rz·Ry·Rx · T(-pivot)
+  // 与原版一致：正 ty = 向下（模型坐标 y 轴向下），正 tx = 往玩家左侧，正 tz = 往身后
+  const R = M4.mul(M4.mul(M4.rotZ(p.rz*Math.PI/180), M4.rotY(p.ry*Math.PI/180)), M4.rotX(p.rx*Math.PI/180));
+  const T1 = M4.trans(piv[0]+p.tx, piv[1]+p.ty, piv[2]+p.tz);
+  const T0 = M4.trans(-piv[0], -piv[1], -piv[2]);
+  return M4.mul(M4.mul(T1, R), T0);
+}
+// 轴心（世界坐标）
+function worldPivot(bone){
+  return M4.apply(partTransform(bone), PARTS.find(p=>p.id===bone).pivot);
+}
+
+/* ---- 撤销 / 重做（栈里存“状态”，栈顶始终是当前状态）---- */
+const UNDO = {stack:[], future:[], max:80};
+const snapShot = () => JSON.stringify(pose);
+function pushUndo(){                       // 提交当前状态为一个撤销点
+  const s = snapShot();
+  if (UNDO.stack.length && UNDO.stack[UNDO.stack.length-1] === s) return;
+  UNDO.stack.push(s); UNDO.future.length = 0;
+  if (UNDO.stack.length > UNDO.max) UNDO.stack.shift();
+  savePose();
+}
+function applySnap(s){
+  const o = JSON.parse(s);
+  BONES.forEach(b => pose[b] = Object.assign(ZERO(), o[b]||{}));
+  syncUI();
+}
+function doUndo(){
+  if (UNDO.stack.length < 2) { toast("没有可撤销的操作"); return; }
+  UNDO.future.push(UNDO.stack.pop());
+  applySnap(UNDO.stack[UNDO.stack.length-1]); savePose();
+}
+function doRedo(){
+  if (!UNDO.future.length) { toast("没有可重做的操作"); return; }
+  const s = UNDO.future.pop(); UNDO.stack.push(s); applySnap(s); savePose();
+}
+
+/* ---- 变换手柄（Gizmo）定义 ----
+   箭头指向 = 「数值增大」的方向 = 部件在该轴上实际移动的方向。
+   注意 Y：原版模型坐标里 +Y 是向下（BlockBench 编辑 MC 模型时也是这样），
+   所以绿色 Y 箭头朝下 —— 拖着它往下走，部件就往下走，和鼠标一致。 */
+const GIZ_AXES = { tx:[1,0,0], ty:[0,1,0], tz:[0,0,1] };
+const GIZ_RINGS = { rx:[[0,1,0],[0,0,1]], ry:[[0,0,1],[1,0,0]], rz:[[0,1,0],[1,0,0]] }; // [u,v]：从 u 转向 v = 数值增大
+const GIZ_PLANES = [["pxy","tx","ty"], ["pyz","ty","tz"], ["pxz","tx","tz"]];
+const GIZ_COL = {
+  tx:[0.82,0.34,0.30], ty:[0.50,0.66,0.42], tz:[0.36,0.51,0.77],
+  rx:[0.82,0.34,0.30], ry:[0.50,0.66,0.42], rz:[0.36,0.51,0.77],
+  pxy:[0.36,0.51,0.77], pyz:[0.82,0.34,0.30], pxz:[0.50,0.66,0.42],
+  pivot:[0.85,0.85,0.85],
+};
+const SNAP = {t:1, r:15};   // 吸附步长：平移 1 像素 / 旋转 15 度
+
+/* =========================================================================
+   5. WebGL 渲染
+   ========================================================================= */
+const canvas = document.getElementById("view");
+const gl = canvas.getContext("webgl", {antialias:true, alpha:true});
+if (!gl) { document.body.innerHTML = "<p style='padding:20px'>你的浏览器不支持 WebGL，请用 Chrome / Edge 打开本文件。</p>"; }
+
+const VS = `
+attribute vec3 aPos; attribute vec3 aNrm; attribute vec2 aUV;
+uniform mat4 uProj, uView, uModel;
+varying vec3 vN; varying vec2 vUV;
+void main(){
+  vec4 wp = uModel * vec4(aPos,1.0);
+  gl_Position = uProj * uView * wp;
+  vN = mat3(uModel) * aNrm;
+  vUV = aUV;
+}`;
+const FS = `
+precision mediump float;
+uniform sampler2D uTex; uniform float uAlpha; uniform vec3 uTint;
+varying vec3 vN; varying vec2 vUV;
+void main(){
+  vec4 c = texture2D(uTex, vUV);
+  if (c.a < 0.05) discard;
+  vec3 n = normalize(vN);
+  // 与 MC 相近的双向光：上方偏前 + 下方偏后
+  float l = max(dot(n, normalize(vec3(-0.4, -1.0, -0.6))), 0.0) * 0.6
+          + max(dot(n, normalize(vec3( 0.4,  1.0,  0.6))), 0.0) * 0.4;
+  float sh = 0.62 + 0.38 * l;
+  gl_FragColor = vec4(c.rgb * sh * uTint, c.a * uAlpha);
+}`;
+function shader(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const A = {pos: gl.getAttribLocation(prog,"aPos"), nrm: gl.getAttribLocation(prog,"aNrm"), uv: gl.getAttribLocation(prog,"aUV")};
+const U = {};
+["uProj","uView","uModel","uTex","uAlpha","uTint"].forEach(n => U[n] = gl.getUniformLocation(prog,n));
+
+const buf = gl.createBuffer();
+let meshIndex = {};   // partId → {start, count}
+function uploadMesh(){
+  const meshes = buildMesh(slim, [64,64]);
+  const data = [];
+  meshIndex = {};
+  for (const p of PARTS){
+    const verts = meshes[p.id];
+    meshIndex[p.id] = {start: data.length/8, count: verts.length/8};
+    for (const v of verts) data.push(v);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+  const stride = 8*4;
+  gl.enableVertexAttribArray(A.pos); gl.vertexAttribPointer(A.pos,3,gl.FLOAT,false,stride,0);
+  gl.enableVertexAttribArray(A.nrm); gl.vertexAttribPointer(A.nrm,3,gl.FLOAT,false,stride,12);
+  gl.enableVertexAttribArray(A.uv);  gl.vertexAttribPointer(A.uv, 2,gl.FLOAT,false,stride,24);
+}
+
+const tex = gl.createTexture();
+function makeDefaultSkin(){
+  // 程序生成的「UV 示意图皮肤」：每个面一个颜色，方便确认贴图对位（也方便自己画皮肤）
+  const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+  const x = c.getContext("2d");
+  x.fillStyle = "#101216"; x.fillRect(0,0,64,64);
+  const COL = {front:"#c98f63", back:"#e0559a", left:"#4ad4e0", right:"#f0a03c",
+               top:"#57c95a", bottom:"#9b6bd6"};
+  // 每个部件的每个面都涂上对应颜色（外层与里层的贴图区域重合，一并画上即可）
+  for (const p of PARTS){
+    for (const f of boxFaceList(partBox(p,false), p.uv, 0, p.mirror)){
+      const [u,v,w,h] = f.rect;
+      if (w <= 0 || h <= 0) continue;
+      x.fillStyle = COL[f.name] || "#888";
+      x.fillRect(u, v, w, h);
+    }
+  }
+  // 头部正面画个脸（验证朝向：眼睛在上、嘴在下）
+  x.fillStyle = "#c98f63"; x.fillRect(8,8,8,8);
+  x.fillStyle = "#ffffff"; x.fillRect(9,10,2,2); x.fillRect(13,10,2,2);
+  x.fillStyle = "#2b4f78"; x.fillRect(10,10,1,2); x.fillRect(14,10,1,2);
+  x.fillStyle = "#8a5b3d"; x.fillRect(11,13,2,1);
+  x.fillStyle = "#7a4a2c"; x.fillRect(8,14,8,2);
+  // 头顶写个 "T"（top），确认上面贴图方向
+  x.fillStyle = "#ffffff"; x.fillRect(11,1,2,6); x.fillRect(9,1,6,2);
+  return c;
+}
+function uploadTexture(canvasOrImg){
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE, canvasOrImg);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+// 相机（环绕 target 旋转；左键拖空白/中键 = 平移 target）；默认从正面偏右看
+const cam = {yaw: 3.6, pitch: 0.12, dist: 78, target:[0,12,0]};
+function camReset(){ cam.yaw = 3.6; cam.pitch = 0.12; cam.dist = 78; cam.target = [0,12,0]; }
+let camEye = [0,0,0], cssH = 720, invVP = null, viewM = null, projM = null;
+function camUpdate(){
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), t = cam.target;
+  camEye = [ t[0]+Math.sin(cam.yaw)*cam.dist*cp, t[1]-sp*cam.dist, t[2]+Math.cos(cam.yaw)*cam.dist*cp ];
+  viewM = M4.lookAt(camEye, t, [0,-1,0]);
+  projM = M4.persp(45*Math.PI/180, canvas.width/canvas.height, 1, 500);
+  invVP = M4.invert(M4.mul(projM, viewM));
+}
+// 某个世界点处「1 屏幕像素 = 多少世界单位」
+function worldPerPixel(p){
+  const d = Math.max(1, V3.dist(camEye, p));
+  return 2*d*Math.tan(22.5*Math.PI/180) / cssH;
+}
+function unproject(nx, ny, nz){
+  const m = invVP;
+  const x = m[0]*nx+m[4]*ny+m[8]*nz+m[12];
+  const y = m[1]*nx+m[5]*ny+m[9]*nz+m[13];
+  const z = m[2]*nx+m[6]*ny+m[10]*nz+m[14];
+  const w = m[3]*nx+m[7]*ny+m[11]*nz+m[15];
+  const i = w ? 1/w : 0;
+  return [x*i, y*i, z*i];
+}
+function screenRay(cx, cy){
+  const r = canvas.getBoundingClientRect();
+  const nx = ((cx-r.left)/r.width)*2-1, ny = 1-((cy-r.top)/r.height)*2;
+  const a = unproject(nx,ny,-1), b = unproject(nx,ny,1);
+  return {o:a, d:V3.norm(V3.sub(b,a))};
+}
+// 射线与平面求交（平面过 P、法线 N）；返回交点或 null
+function rayPlane(ray, P, N){
+  const dn = V3.dot(ray.d, N);
+  if (Math.abs(dn) < 1e-7) return null;
+  const t = V3.dot(V3.sub(P, ray.o), N)/dn;
+  return t < 0 ? null : V3.add(ray.o, V3.mul(ray.d, t));
+}
+// 射线到线段的最短距离（用于轴杆拾取）
+function raySegDist(ray, A, B){
+  const u = V3.sub(B,A), v = ray.d, w0 = V3.sub(A, ray.o);
+  const a = V3.dot(u,u), b = V3.dot(u,v), c = V3.dot(v,v), d0 = V3.dot(u,w0), e = V3.dot(v,w0);
+  const den = a*c - b*b;
+  let s = Math.abs(den) < 1e-9 ? 0 : (b*e - c*d0)/den;
+  s = Math.max(0, Math.min(1, s));
+  const P = V3.add(A, V3.mul(u,s));
+  const t = Math.max(0, V3.dot(V3.sub(P, ray.o), v)/c);
+  return V3.dist(P, V3.add(ray.o, V3.mul(v,t)));
+}
+// 沿 dir（已归一化）离射线的参数（世界单位）——用于拖拽轴杆
+function closestOnLine(ray, A, dir){
+  const w0 = V3.sub(A, ray.o), b = V3.dot(dir, ray.d);
+  const den = 1 - b*b;
+  if (Math.abs(den) < 1e-9) return 0;
+  return (b*V3.dot(ray.d, w0) - V3.dot(dir, w0)) / den;
+}
+// 射线与轴对齐包围盒求交（返回最近正 t 或 null）
+function rayAABB(o, d, mn, mx){
+  let t0 = -Infinity, t1 = Infinity;
+  for (let i=0;i<3;i++){
+    if (Math.abs(d[i]) < 1e-9){ if (o[i] < mn[i] || o[i] > mx[i]) return null; continue; }
+    let a = (mn[i]-o[i])/d[i], b = (mx[i]-o[i])/d[i];
+    if (a > b){ const s=a; a=b; b=s; }
+    if (a > t0) t0 = a;
+    if (b < t1) t1 = b;
+    if (t0 > t1) return null;
+  }
+  return t1 < 0 ? null : (t0 >= 0 ? t0 : t1);
+}
+
+function resize(){
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  canvas.width = Math.floor(innerWidth*dpr); canvas.height = Math.floor(innerHeight*dpr);
+  cssH = innerHeight;
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener("resize", resize);
+
+/* ---- 纯色着色器（手柄 / 网格）---- */
+const VS2 = `attribute vec3 aPos; uniform mat4 uMVP; void main(){ gl_Position = uMVP * vec4(aPos,1.0); }`;
+const FS2 = `precision mediump float; uniform vec3 uColor; uniform float uAlpha;
+void main(){ gl_FragColor = vec4(uColor, uAlpha); }`;
+const progG = gl.createProgram();
+gl.attachShader(progG, shader(gl.VERTEX_SHADER, VS2));
+gl.attachShader(progG, shader(gl.FRAGMENT_SHADER, FS2));
+gl.linkProgram(progG);
+const AG = gl.getAttribLocation(progG, "aPos");
+const UG = {mvp: gl.getUniformLocation(progG,"uMVP"), color: gl.getUniformLocation(progG,"uColor"), alpha: gl.getUniformLocation(progG,"uAlpha")};
+
+/* ---- 手柄几何（单位尺寸：轴长 1.0）---- */
+function quadPush(out,a,b,c,d){ out.push(...a,...b,...c, ...a,...c,...d); }
+function boxPush(out,O,du,dv,dw){
+  const P=(i,j,k)=>V3.add(O, V3.add(V3.mul(du,i), V3.add(V3.mul(dv,j), V3.mul(dw,k))));
+  const c=[P(0,0,0),P(1,0,0),P(1,1,0),P(0,1,0),P(0,0,1),P(1,0,1),P(1,1,1),P(0,1,1)];
+  quadPush(out,c[0],c[1],c[2],c[3]); quadPush(out,c[5],c[4],c[7],c[6]);
+  quadPush(out,c[4],c[0],c[3],c[7]); quadPush(out,c[1],c[5],c[6],c[2]);
+  quadPush(out,c[3],c[2],c[6],c[7]); quadPush(out,c[4],c[5],c[1],c[0]);
+}
+function pyramidPush(out,tip,base,r,u,v){
+  const b=[V3.add(base,V3.mul(u,r)), V3.add(base,V3.mul(v,r)), V3.sub(base,V3.mul(u,r)), V3.sub(base,V3.mul(v,r))];
+  for (let i=0;i<4;i++) out.push(...b[i], ...b[(i+1)%4], ...tip);
+  quadPush(out,b[3],b[2],b[1],b[0]);
+}
+function ringPush(out,u,v,r0,r1,seg){
+  const pt=(a,r)=>V3.add(V3.mul(u,Math.cos(a)*r), V3.mul(v,Math.sin(a)*r));
+  for (let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2;
+    quadPush(out, pt(a0,r0), pt(a0,r1), pt(a1,r1), pt(a1,r0));
+  }
+}
+function perpOf(d){ return Math.abs(d[1]) > 0.9 ? [1,0,0] : [0,1,0]; }
+
+const bufG = gl.createBuffer();
+let gizRanges = [];
+function buildGizmoMesh(){
+  const groups = [];
+  for (const id of ["tx","ty","tz"]){
+    const d = GIZ_AXES[id], u = perpOf(d), v = V3.cross(d,u), out = [];
+    boxPush(out, V3.mul(d,0.06), V3.mul(d,0.78), V3.mul(u,0.013), V3.mul(v,0.013));
+    pyramidPush(out, V3.mul(d,1.0), V3.mul(d,0.84), 0.055, u, v);
+    groups.push({id, verts:out});
+  }
+  for (const [id,a,b] of GIZ_PLANES){
+    const da = GIZ_AXES[a], db = GIZ_AXES[b], out = [];
+    const o = V3.add(V3.mul(da,0.24), V3.mul(db,0.24));
+    const ea = V3.mul(da,0.19), eb = V3.mul(db,0.19);
+    quadPush(out, o, V3.add(o,ea), V3.add(V3.add(o,ea),eb), V3.add(o,eb));
+    groups.push({id, verts:out});
+  }
+  for (const id of ["rx","ry","rz"]){
+    const [u,v] = GIZ_RINGS[id], out = [];
+    ringPush(out, u, v, 0.962, 1.038, 56);
+    groups.push({id, verts:out});
+  }
+  const cross = [];
+  for (const [d,u,v] of [[[1,0,0],[0,1,0],[0,0,1]], [[0,1,0],[0,0,1],[1,0,0]], [[0,0,1],[1,0,0],[0,1,0]]]){
+    boxPush(cross, V3.mul(d,-0.038), V3.mul(d,0.076), V3.mul(u,0.006), V3.mul(v,0.006));
+  }
+  groups.push({id:"pivot", verts:cross});
+
+  const data = [];
+  gizRanges = [];
+  for (const g of groups){
+    gizRanges.push({id:g.id, start:data.length/3, count:g.verts.length/3});
+    for (const v of g.verts) data.push(v);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufG);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+}
+
+/* ---- 地面网格（脚底高度 y=24）---- */
+const bufGrid = gl.createBuffer();
+let gridCount = 0;
+function buildGrid(){
+  const data = [], R = 72, ST = 8, Y = 24;
+  for (let x=-R; x<=R; x+=ST){
+    data.push(x,Y,-R,  x,Y,R,   -R,Y,x,  R,Y,x);      // 每帧 4 个顶点 = 2 条线
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufGrid);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+  gridCount = data.length/3;
+}
+
+let hoverBone = null;
+function draw(){
+  gl.enable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.clearColor(0, 0, 0, 0);          // 透明清屏：露出画布后面的"虚空柔光"（CSS 渐变）
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  camUpdate();
+
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(U.uProj,false,projM);
+  gl.uniformMatrix4fv(U.uView,false,viewM);
+  gl.uniform1i(U.uTex,0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+
+  // 每帧都要重设模型的顶点属性（网格/手柄的绘制会覆盖全局的指针状态）
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.enableVertexAttribArray(A.pos); gl.vertexAttribPointer(A.pos,3,gl.FLOAT,false,32,0);
+  gl.enableVertexAttribArray(A.nrm); gl.vertexAttribPointer(A.nrm,3,gl.FLOAT,false,32,12);
+  gl.enableVertexAttribArray(A.uv);  gl.vertexAttribPointer(A.uv, 2,gl.FLOAT,false,32,24);
+
+  for (const p of PARTS){
+    if (p.overlay && !showOverlay) continue;
+    const idx = meshIndex[p.id]; if (!idx) continue;
+    gl.uniformMatrix4fv(U.uModel, false, partTransform(p.bone));
+    const isSel = (p.bone === selPart), isHov = (p.bone === hoverBone);
+    // 亮度只看"所属骨骼是否被选中"：外层皮肤与里层同一规则
+    // （旧逻辑对外层跳过变暗，导致它看起来永远像被选中）
+    let k = 1.0;
+    if (!isSel) k = isHov ? 0.85 : 0.5;
+    gl.uniform1f(U.uAlpha, 1.0);
+    gl.uniform3f(U.uTint, k, k, k);
+    gl.drawArrays(gl.TRIANGLES, idx.start, idx.count);
+  }
+
+  // ---- 地面网格 + 手柄：纯色 ----
+  gl.useProgram(progG);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufGrid);
+  gl.enableVertexAttribArray(AG); gl.vertexAttribPointer(AG,3,gl.FLOAT,false,12,0);
+  gl.uniformMatrix4fv(UG.mvp, false, M4.mul(projM, viewM));
+  gl.uniform3f(UG.color, 0.26, 0.26, 0.30);
+  gl.uniform1f(UG.alpha, 1);
+  if (showGrid) gl.drawArrays(gl.LINES, 0, gridCount);
+
+  if (gizVisible()){
+    const piv = worldPivot(selPart);
+    const s = worldPerPixel(piv) * 96;
+    const mvp = M4.mul(M4.mul(projM, viewM), M4.mul(M4.trans(piv[0],piv[1],piv[2]), M4.scale(s,s,s)));
+    gl.uniformMatrix4fv(UG.mvp, false, mvp);
+    gl.disable(gl.DEPTH_TEST);           // 手柄始终可见（和 BlockBench 一致）
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufG);
+    gl.vertexAttribPointer(AG,3,gl.FLOAT,false,0,0);
+    for (const g of gizRanges){
+      if (g.id !== "pivot"){
+        const isRing = g.id[0] === "r";
+        if (mode === "rotate" ? !isRing : isRing) continue;   // 只画当前模式的手柄
+      }
+      const hot = (giz.hover === g.id) || (giz.drag && giz.drag.handle === g.id);
+      const c = hot ? [0.91,0.76,0.29] : (GIZ_COL[g.id] || [0.85,0.85,0.85]);
+      gl.uniform3f(UG.color, c[0], c[1], c[2]);
+      gl.uniform1f(UG.alpha, hot ? 1.0 : 0.95);
+      gl.drawArrays(gl.TRIANGLES, g.start, g.count);
+    }
+    gl.enable(gl.DEPTH_TEST);
+  }
+  requestAnimationFrame(draw);
+}
+
+/* =========================================================================
+   6. 界面
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+function toast(msg, ms=2600){
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast._t); toast._t = setTimeout(()=> t.style.display="none", ms);
+}
+const isOverlay = id => PARTS.find(p=>p.id===id).overlay;
+const boneOf = id => PARTS.find(p=>p.id===id).bone;
+
+// 部件按钮
+function buildPartRow(){
+  const row = $("partRow"); row.innerHTML = "";
+  BONES.forEach(b=>{
+    const btn = document.createElement("button");
+    btn.style.flex = "1 0 30%";
+    btn.textContent = LABEL[b];
+    btn.dataset.bone = b;
+    btn.onclick = () => { selPart = b; syncUI(); };
+    row.appendChild(btn);
+  });
+}
+// 滑条
+let editBefore = null;                       // 连续编辑（拖滑条）期间不打断撤销点
+function beginEdit(){ if (editBefore === null) editBefore = snapShot(); }
+function endEdit(){
+  if (editBefore === null) return;
+  editBefore = null;
+  pushUndo();                                 // 提交编辑后的状态
+}
+function buildSliders(){
+  const box = $("sliders"); box.innerHTML = "";
+  const keys = mode === "translate" ? ["tx","ty","tz"] : ["rx","ry","rz"];
+  keys.forEach(k=>{
+    const row = document.createElement("div"); row.className = "sl";
+    const lab = document.createElement("label"); lab.textContent = AXIS_LABEL[k];
+    const rng = document.createElement("input");
+    rng.type = "range"; rng.dataset.axis = k;
+    const lim = mode === "translate" ? LIMIT.t : LIMIT.r;
+    rng.min = -lim; rng.max = lim; rng.step = mode === "translate" ? 0.1 : 1;
+    const num = document.createElement("input");
+    num.type = "number"; num.step = 0.1; num.dataset.axis = k;
+    rng.oninput = () => { beginEdit(); setAxisRaw(k, parseFloat(rng.value)); paintRange(rng); };
+    rng.onchange = endEdit; rng.onpointerup = endEdit;
+    num.oninput  = () => { beginEdit(); setAxisRaw(k, parseFloat(num.value)||0); };
+    num.onchange = endEdit; num.onblur = endEdit;
+    row.append(lab, rng, num); box.appendChild(row);
+  });
+  $("slTitle").textContent = mode === "translate" ? "平移数值（像素，1=1/16 格）" : "旋转数值（角度）";
+  $("axisNote").innerHTML = mode === "translate"
+    ? '数值方向与原版一致：<span class="hi">+X</span> 往玩家左侧 · <span class="hi">+Y</span> 向下 · <span class="hi">+Z</span> 往身后<br>'
+      + '（原版模型坐标 +Y 就是向下，所以<span class="ax-y">绿色 Y 箭头朝下</span>；拖它往下，部件就往下）'
+    : "角度单位：度（正负与原版一致）· 拖视口里的彩色圆环更好调";
+  syncUI();
+}
+function setAxisRaw(axis, val){
+  if (!isFinite(val)) val = 0;
+  const lim = mode === "translate" ? LIMIT.t : LIMIT.r;
+  pose[selPart][axis] = Math.max(-lim, Math.min(lim, Math.round(val*100)/100));
+  syncUI();
+}
+function setAxis(axis, val){ pushUndo(); setAxisRaw(axis, val); }
+/** 滑块已填充的部分用 Spline 蓝：原生 range 不会自动分色，靠一个 CSS 变量控制渐变断点 */
+function paintRange(rng){
+  const min = parseFloat(rng.min) || 0, max = parseFloat(rng.max) || 100;
+  const v = parseFloat(rng.value) || 0;
+  rng.style.setProperty("--fill", (max > min ? ((v - min) / (max - min)) * 100 : 0).toFixed(2) + "%");
+}
+
+function syncUI(){
+  document.querySelectorAll("#partRow button").forEach(b=>{
+    b.className = (b.dataset.bone === selPart) ? "sel" : "";
+  });
+  $("modeT").className = mode === "translate" ? "sel" : "";
+  $("modeR").className = mode === "rotate" ? "sel" : "";
+  const ae = document.activeElement;
+  document.querySelectorAll("#sliders input").forEach(inp=>{
+    if (inp === ae) return;                       // 别打断正在输入的数字框
+    inp.value = pose[selPart][inp.dataset.axis] || 0;
+    if (inp.type === "range") paintRange(inp);
+  });
+  drawSkinPreview();
+  savePoseSoft();
+  scheduleAutoSync();
+}
+
+/* =========================================================================
+   6.5 视口交互：拾取 + 变换手柄（类 Unreal / BlockBench）
+   ========================================================================= */
+let dragging = null, lastX = 0, lastY = 0;
+const giz = {hover:null, drag:null};
+const gizVisible = () => !!selPart;
+function inPanel(x,y){ const r = $("panel").getBoundingClientRect(); return x>=r.left-8 && y>=r.top-8 && x<=r.right+8 && y<=r.bottom+8; }
+function showReadout(txt){
+  const r = $("readout");
+  if (!txt){ r.style.display = "none"; return; }
+  r.textContent = txt; r.style.display = "block";
+}
+
+// 射线拾取：命中哪个部件（返回 bone）
+function pickPart(ray){
+  let best = null;
+  for (const p of PARTS){
+    if (p.overlay) continue;
+    const inv = M4.invert(partTransform(p.bone));
+    const o = M4.apply(inv, ray.o), d = M4.applyDir(inv, ray.d);
+    const [bx,by,bz,bw,bh,bd] = partBox(p, slim), dd = p.dil;
+    const t = rayAABB(o, d, [bx-dd,by-dd,bz-dd], [bx+bw+dd,by+bh+dd,bz+bd+dd]);
+    if (t !== null && t > 0.001 && (!best || t < best.t)) best = {t, bone:p.bone};
+  }
+  return best ? best.bone : null;
+}
+
+// 圆环探测：找环上离射线最近的点，返回 {dist, angle}
+// （比“射线×环平面求交”稳得多：相机与环平面接近平行时也不会抖/丢）
+function ringProbe(ray, piv, u, v, s){
+  const distAt = (a) => {
+    const P = V3.add(piv, V3.add(V3.mul(u, Math.cos(a)*s), V3.mul(v, Math.sin(a)*s)));
+    const t = Math.max(0, V3.dot(V3.sub(P, ray.o), ray.d));
+    return V3.dist(P, V3.add(ray.o, V3.mul(ray.d, t)));
+  };
+  const N = 96;
+  let bi = 0, bd = Infinity;
+  for (let i=0;i<N;i++){ const d = distAt(i/N*Math.PI*2); if (d < bd){ bd = d; bi = i; } }
+  let lo = (bi-1)/N*Math.PI*2, hi = (bi+1)/N*Math.PI*2;
+  for (let k=0;k<14;k++){                       // 三分搜索细化
+    const m1 = lo + (hi-lo)/3, m2 = hi - (hi-lo)/3;
+    if (distAt(m1) < distAt(m2)) hi = m2; else lo = m1;
+  }
+  const a = (lo+hi)/2;
+  return {dist: distAt(a), angle: a};
+}
+
+// 手柄拾取（多个候选时取最近的那个）
+function gizHit(ray){
+  if (!gizVisible()) return null;
+  const piv = worldPivot(selPart);
+  const s = worldPerPixel(piv)*96, tol = worldPerPixel(piv)*11;
+  let best = null, bestD = Infinity;
+  if (mode === "rotate"){
+    for (const id of ["rx","ry","rz"]){
+      const [u,v] = GIZ_RINGS[id];
+      const d = ringProbe(ray, piv, u, v, s).dist;
+      if (d < tol && d < bestD){ bestD = d; best = id; }
+    }
+    return best;
+  }
+  for (const [id,a,b] of GIZ_PLANES){          // 平面块优先（面积小、易被轴杆压住）
+    const da = GIZ_AXES[a], db = GIZ_AXES[b];
+    const p = rayPlane(ray, piv, V3.cross(da,db));
+    if (!p) continue;
+    const rel = V3.sub(p, piv);
+    const x = V3.dot(rel,da)/s, y = V3.dot(rel,db)/s;
+    if (x > 0.17 && x < 0.49 && y > 0.17 && y < 0.49) return id;
+  }
+  for (const id of ["tx","ty","tz"]){
+    const d = GIZ_AXES[id];
+    const dist = raySegDist(ray, V3.add(piv, V3.mul(d,0.04*s)), V3.add(piv, V3.mul(d,1.06*s)));
+    if (dist < tol && dist < bestD){ bestD = dist; best = id; }
+  }
+  return best;
+}
+
+function gizStart(handle, ray){
+  const piv = worldPivot(selPart);
+  const base = JSON.parse(JSON.stringify(pose[selPart]));
+  if (mode === "rotate"){
+    const [u,v] = GIZ_RINGS[handle];
+    const s = worldPerPixel(piv)*96;
+    giz.drag = {kind:"rot", handle, axis:handle, piv, u, v, s, base,
+                last: ringProbe(ray, piv, u, v, s).angle, total:0, snap:false};
+  } else if (handle[0] === "t"){
+    const d = GIZ_AXES[handle];
+    giz.drag = {kind:"axis", handle, axis:handle, piv, d, base,
+                s0: closestOnLine(ray, piv, d), snap:false};
+  } else {
+    const pl = GIZ_PLANES.find(x => x[0] === handle);
+    const da = GIZ_AXES[pl[1]], db = GIZ_AXES[pl[2]];
+    const p = rayPlane(ray, piv, V3.cross(da,db));
+    const rel = p ? V3.sub(p, piv) : [0,0,0];
+    giz.drag = {kind:"plane", handle, piv, da, db, base,
+                axisA:pl[1], axisB:pl[2],
+                p0a: V3.dot(rel,da), p0b: V3.dot(rel,db), snap:false};
+  }
+}
+
+function gizMove(ray){
+  const D = giz.drag; if (!D) return;
+  const L = k => k[1].toUpperCase();       // "tx" → "X"
+  if (D.kind === "rot"){
+    const th = ringProbe(ray, D.piv, D.u, D.v, D.s).angle;
+    let d = th - D.last;
+    while (d > Math.PI) d -= Math.PI*2;
+    while (d < -Math.PI) d += Math.PI*2;
+    D.last = th; D.total += d;
+    let val = D.base[D.axis] + D.total*180/Math.PI;
+    if (D.snap) val = Math.round(val/SNAP.r)*SNAP.r;
+    setAxisRaw(D.axis, val);
+    showReadout(`${L(D.axis)} 旋转  ${pose[selPart][D.axis].toFixed(1)}°${D.snap?"  吸附":""}`);
+  } else if (D.kind === "axis"){
+    const s = closestOnLine(ray, D.piv, D.d);
+    let val = D.base[D.axis] + (s - D.s0);
+    if (D.snap) val = Math.round(val/SNAP.t)*SNAP.t;
+    setAxisRaw(D.axis, val);
+    showReadout(`${L(D.axis)} 平移  ${pose[selPart][D.axis].toFixed(2)} px${D.snap?"  吸附":""}`);
+  } else {
+    const p = rayPlane(ray, D.piv, V3.cross(D.da,D.db)); if (!p) return;
+    const rel = V3.sub(p, D.piv);
+    let va = D.base[D.axisA] + V3.dot(rel,D.da) - D.p0a;
+    let vb = D.base[D.axisB] + V3.dot(rel,D.db) - D.p0b;
+    if (D.snap){ va = Math.round(va/SNAP.t)*SNAP.t; vb = Math.round(vb/SNAP.t)*SNAP.t; }
+    setAxisRaw(D.axisA, va); setAxisRaw(D.axisB, vb);
+    showReadout(`${L(D.axisA)} ${pose[selPart][D.axisA].toFixed(2)} · ${L(D.axisB)} ${pose[selPart][D.axisB].toFixed(2)} px${D.snap?"  吸附":""}`);
+  }
+}
+function gizCancel(){
+  const D = giz.drag; if (!D) return;
+  Object.assign(pose[selPart], D.base);
+  giz.drag = null; dragging = null; showReadout(null); syncUI(); savePose();
+}
+
+function panCamera(dxPx, dyPx){
+  const fwd = V3.norm(V3.sub(cam.target, camEye));
+  const right = V3.norm(V3.cross(fwd, [0,-1,0]));
+  const up = V3.cross(right, fwd);
+  const k = worldPerPixel(cam.target);
+  cam.target = V3.add(cam.target, V3.add(V3.mul(right, -dxPx*k), V3.mul(up, dyPx*k)));
+}
+function focusSelected(){
+  cam.target = worldPivot(selPart);
+  toast("已聚焦：" + LABEL[selPart]);
+}
+
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("mousedown", e=>{
+  lastX = e.clientX; lastY = e.clientY;
+  if (inPanel(e.clientX, e.clientY)) return;
+  if (e.button === 2){ dragging = "cam"; return; }
+  if (e.button === 1){ dragging = "pan"; e.preventDefault(); return; }
+  if (e.button !== 0) return;
+  const ray = screenRay(e.clientX, e.clientY);
+  const hit = gizHit(ray);
+  if (hit){
+    gizStart(hit, ray);       // 拖拽前的状态已在撤销栈顶
+    dragging = "gizmo";
+    return;
+  }
+  const pick = pickPart(ray);
+  if (pick && pick !== selPart){ selPart = pick; syncUI(); }
+  dragging = "pan";     // 空白处左键拖动 = 平移视角
+});
+addEventListener("mouseup", ()=>{
+  if (dragging === "gizmo"){ showReadout(null); giz.drag = null; pushUndo(); }
+  dragging = null;
+});
+addEventListener("mousemove", e=>{
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  if (!dragging){
+    if (inPanel(e.clientX, e.clientY)){ giz.hover = null; hoverBone = null; canvas.style.cursor = "default"; return; }
+    const ray = screenRay(e.clientX, e.clientY);
+    giz.hover = gizHit(ray);
+    hoverBone = giz.hover ? null : pickPart(ray);
+    canvas.style.cursor = (giz.hover || hoverBone) ? "pointer" : "grab";
+    return;
+  }
+  lastX = e.clientX; lastY = e.clientY;
+  if (dragging === "cam"){
+    cam.yaw   += dx * 0.008;
+    cam.pitch  = Math.max(-1.35, Math.min(1.35, cam.pitch + dy * 0.008));
+  } else if (dragging === "pan"){
+    panCamera(dx, dy);
+  } else if (dragging === "gizmo"){
+    giz.drag.snap = e.ctrlKey || e.metaKey;
+    gizMove(screenRay(e.clientX, e.clientY));
+  }
+});
+canvas.addEventListener("wheel", e=>{
+  e.preventDefault();
+  cam.dist = Math.max(18, Math.min(240, cam.dist * (e.deltaY>0 ? 1.09 : 0.92)));
+}, {passive:false});
+addEventListener("keydown", e=>{
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if (e.ctrlKey || e.metaKey){
+    const k = e.key.toLowerCase();
+    if (k === "z"){ e.preventDefault(); doUndo(); }
+    else if (k === "y"){ e.preventDefault(); doRedo(); }
+    return;
+  }
+  switch (e.key.toLowerCase()){
+    case "w": mode = "translate"; buildSliders(); break;
+    case "e": mode = "rotate";    buildSliders(); break;
+    case "f": focusSelected(); break;
+    case "escape": if (giz.drag) gizCancel(); break;
+  }
+});
+
+$("modeT").onclick = ()=>{ mode="translate"; buildSliders(); };
+$("modeR").onclick = ()=>{ mode="rotate";    buildSliders(); };
+$("btnResetPart").onclick = ()=>{ pose[selPart] = ZERO(); pushUndo(); syncUI(); };
+$("btnResetAll").onclick  = ()=>{ BONES.forEach(b=>pose[b]=ZERO()); pushUndo(); syncUI(); };
+$("btnUndo").onclick = doUndo;
+$("btnRedo").onclick = doRedo;
+$("btnFocus").onclick = focusSelected;
+$("btnCamReset").onclick  = camReset;
+$("btnGrid").onclick = ()=>{ showGrid = !showGrid; $("btnGrid").className = showGrid ? "" : "off"; };
+$("btnMirror").onclick = ()=>{
+  const P = pose[selPart];
+  P.tx = -P.tx; P.ry = -P.ry; P.rz = -P.rz;
+  pushUndo(); syncUI(); toast("已按中轴镜像本部件\n（X 平移 / Y 偏航 / Z 翻滚 取反）");
+};
+$("btnSlim").onclick = ()=>{
+  slim = !slim; uploadMesh();
+  $("btnSlim").className = slim ? "sel" : "";
+  $("btnSlim").textContent = slim ? "模型：细臂（Alex）" : "模型：宽臂（Steve）";
+};
+$("btnOverlay").onclick = ()=>{ showOverlay = !showOverlay; $("btnOverlay").className = showOverlay?"sel":""; $("btnOverlay").textContent = showOverlay?"显示外层":"隐藏外层"; };
+/* ---- 皮肤：载入 / 预览（选中部件的 UV 高亮）/ 记忆 ---- */
+const LS_POSE = "qxp_pose_current_v1", LS_SKIN = "qxp_skin_v1";
+let skinCanvas = null, saveTimer = null;
+function savePose(){ try{ localStorage.setItem(LS_POSE, snapShot()); }catch(e){} }
+function savePoseSoft(){ clearTimeout(saveTimer); saveTimer = setTimeout(savePose, 400); }
+function loadPose(){
+  try{
+    const s = localStorage.getItem(LS_POSE); if (!s) return;
+    const o = JSON.parse(s);
+    BONES.forEach(b => { if (o[b]) pose[b] = Object.assign(ZERO(), o[b]); });
+  }catch(e){}
+}
+function setSkinCanvas(c, silent){
+  skinCanvas = c;
+  uploadTexture(c);
+  drawSkinPreview();
+  try{ localStorage.setItem(LS_SKIN, c.toDataURL("image/png")); }catch(e){}
+  if (!silent) toast("已载入皮肤");
+}
+function loadSkinFile(f){
+  const img = new Image();
+  img.onload = ()=>{
+    const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+    const x = c.getContext("2d"); x.imageSmoothingEnabled = false;
+    x.drawImage(img, 0, 0, img.width, img.height, 0, 0, 64, 64);
+    setSkinCanvas(c); toast("已载入皮肤：" + f.name);
+  };
+  img.onerror = ()=> toast("这张 PNG 读不出来，换一张试试（需要 64×64 的皮肤图）");
+  img.src = URL.createObjectURL(f);
+}
+function loadStoredSkin(){
+  // 先同步放上默认皮肤，避免开局一两帧模型是黑的
+  skinCanvas = makeDefaultSkin();
+  uploadTexture(skinCanvas);
+  drawSkinPreview();
+  const url = (()=>{ try{ return localStorage.getItem(LS_SKIN); }catch(e){ return null; } })();
+  const src = url || DEFAULT_SKIN;        // 本机没存过皮肤就用内置的这张
+  if (!src) return;
+  const img = new Image();
+  img.onload = ()=>{
+    const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+    const x = c.getContext("2d"); x.imageSmoothingEnabled = false;
+    x.drawImage(img, 0, 0, 64, 64);
+    skinCanvas = c; uploadTexture(c); drawSkinPreview();
+  };
+  img.onerror = ()=>{};
+  img.src = src;
+}
+function drawSkinPreview(){
+  const el = $("skinPrev"); if (!el || !skinCanvas) return;
+  const x = el.getContext("2d"), k = el.width/64;
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, el.width, el.height);
+  x.drawImage(skinCanvas, 0, 0, 64, 64, 0, 0, el.width, el.height);
+  x.lineWidth = 1;
+  for (const p of PARTS){
+    if (p.bone !== selPart) continue;
+    x.strokeStyle = p.overlay ? "#7aa2ff" : "#4ade80";
+    for (const f of boxFaceList(partBox(p, false), p.uv, 0, p.mirror)){
+      const [u,v,w,h] = f.rect;
+      if (w <= 0 || h <= 0) continue;
+      x.strokeRect(u*k+0.5, v*k+0.5, w*k-1, h*k-1);
+    }
+  }
+}
+$("btnSkin").onclick = ()=> $("fileSkin").click();
+$("fileSkin").onchange = e=>{ const f = e.target.files[0]; if (f) loadSkinFile(f); e.target.value = ""; };
+// 直接把 PNG 拖进窗口
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e=>{
+  e.preventDefault();
+  const f = [...(e.dataTransfer.files||[])].find(f => /\.png$/i.test(f.name));
+  if (f) loadSkinFile(f);
+});
+
+/* =========================================================================
+   7. 生成资源包文件（与 tools/gen_pack.py 一致）
+   ========================================================================= */
+const AXES6 = ["rx","ry","rz","tx","ty","tz"];
+const OVERLAY_PARENT = {headwear:"head", jacket:"body", right_sleeve:"right_arm",
+                        left_sleeve:"left_arm", right_pants:"right_leg", left_pants:"left_leg"};
+const POSE_PARTS = BONES.slice();
+
+function fmt(v){
+  let s = (Math.round(v*10000)/10000).toString();
+  return (s === "-0") ? "0" : s;
+}
+function poseExpr(bone, axis, overlayOf){
+  if (overlayOf) return `${bone}.${axis}+var.qxp_${overlayOf}_${axis}`;
+  if (bone === "right_arm" || bone === "left_arm")
+    return `${bone}.${axis}+if(is_first_person_hand,0,var.qxp_${bone}_${axis})`;
+  return `${bone}.${axis}+var.qxp_${bone}_${axis}`;
+}
+// 编辑器坐标（原版：y 向下、原点在颈部）→ CEM 坐标（.jem 使用：y 向上、以脚底为 0，x 取反）
+//   例：头 [-4,-8,-4,8,8,8] → [-4,24,-4,8,8,8]；右臂 [-8,0,-2,4,12,4] → [4,12,-2,4,12,4]
+function toCemBox(b){
+  const [x,y,z,w,h,d] = b;
+  return [-(x+w), 24-(y+h), z, w, h, d];
+}
+function jemModel(slimModel, legacy){
+  const models = [{part:"root", id:"root", invertAxis:"xy", translate:[0,0,0], model:"qxp_pose.jpm"}];
+  for (const p of PARTS){
+    const b = toCemBox(partBox(p, slimModel));
+    const entry = { part:p.id, id:p.id, invertAxis:"xy", translate:CEM_TRANSLATE[p.id],
+      boxes:[{coordinates:b, textureOffset:p.uv.slice()}] };
+    if (p.dil) entry.boxes[0].sizeAdd = +(p.dil === 0.5 ? 0.49 : 0.24);
+    const anim = {};
+    if (!p.overlay){
+      AXES6.forEach(a => anim[`${p.id}.${a}`] = poseExpr(p.bone, a, null));
+    } else if (legacy){
+      AXES6.forEach(a => anim[`${p.id}.${a}`] = poseExpr(p.id, a, OVERLAY_PARENT[p.id]));
+    }
+    if (Object.keys(anim).length) entry.animations = [anim];
+    models.push(entry);
+  }
+  return { credit:"Qxiiphoto Pose Pack — 基于原版玩家模型几何；骨骼由 EMF 渲染",
+           textureSize:[64,64], models };
+}
+// .jem 中每个部件的旋转轴心（CEM 坐标）
+const CEM_TRANSLATE = {
+  head:[0,-24,0], headwear:[0,-24,0], body:[0,-24,0], jacket:[0,-24,0],
+  right_arm:[-5,-22,0], right_sleeve:[-5,-22,0], left_arm:[5,-22,0], left_sleeve:[5,-22,0],
+  right_leg:[-2,-12,0], right_pants:[-2,-12,0], left_leg:[2,-12,0], left_pants:[2,-12,0],
+};
+function poseFile(){
+  const anim = {};
+  for (const bone of POSE_PARTS){
+    for (const a of AXES6){
+      const v = pose[bone][a] || 0;
+      anim[`var.qxp_${bone}_${a}`] = (a[0] === "r") ? `torad(${fmt(v)})` : fmt(v);
+    }
+  }
+  return { credit:"Qxiiphoto Pose Pack — 本文件由「姿势编辑器」生成，数值可直接手改",
+           id:"qxp_pose", animations:[anim] };
+}
+const MCMETA = {
+  pack:{ description:"§6Qxiiphoto 姿势包 §8· §7玩家骨骼（EMF/ETF）",
+         pack_format:15, supported_formats:{min_inclusive:15, max_inclusive:999},
+         min_format:15, max_format:999 },
+  overlays:{ entries:[{ directory:"legacy",
+         formats:{min_inclusive:15, max_inclusive:41}, min_format:15, max_format:41 }] }
+};
+const CEM = "assets/minecraft/emf/cem/";
+function packFiles(slimModel){
+  const J = o => JSON.stringify(o, null, 1) + "\n";   // 末尾换行，与 tools/gen_pack.py 输出保持一致
+  return {
+    "pack.mcmeta": J(MCMETA),
+    [CEM+"player.jem"]: J(jemModel(false,false)),
+    [CEM+"player_slim.jem"]: J(jemModel(true,false)),
+    [CEM+"qxp_pose.jpm"]: J(poseFile()),
+    ["legacy/"+CEM+"player.jem"]: J(jemModel(false,true)),
+    ["legacy/"+CEM+"player_slim.jem"]: J(jemModel(true,true)),
+  };
+}
+
+/* =========================================================================
+   8. 写入 / 导出
+   ========================================================================= */
+const PACK_NAME = "QxiiphotoPose";
+let dirHandle = null;
+let autoSync = false, autoTimer = null, autoWrites = 0;
+
+/* ---- 游戏内 mod（直连）：页面由 mod 提供时，数值直接发给 mod，立刻在游戏里生效 ---- */
+let bridge = null;
+
+async function detectBridge(){
+  if (!/^https?:$/.test(location.protocol)) return;      // 直接双击打开的文件没有服务端
+  try{
+    const r = await fetch("/api/ping", {cache:"no-store"});
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || j.mod !== "qxp_pose") return;
+    bridge = j;
+    autoSync = true;
+    $("btnAuto").className = "sel";
+    $("btnAuto").textContent = "自动同步：开（已连游戏）";
+    $("led").className = "dot on";
+    $("stateTxt").textContent = "已连上游戏 · v" + j.version + " · 已同步 0 次";
+    document.title = "Qxiiphoto 姿势编辑器 · 游戏 v" + j.version;
+    const beat = () => fetch("/api/heartbeat", {method:"POST"}).catch(()=>{});
+    beat(); setInterval(beat, 3000);
+    setInterval(pollBridge, 1500);
+    // 由 mod 直接渲染时，资源包那套就用不上了：收起来，免得混淆
+    ["btnConnect", "btnExport"].forEach(id => { const b = $(id); if (b) b.style.display = "none"; });
+    const h = $("packTitle"); if (h) h.textContent = "应用（由游戏内 mod 直接生效）";
+    const note = $("packNote");
+    if (note) note.innerHTML = "改完立刻在游戏里生效，不需要资源包、也不用按 F3+T。<br>（下面的「导出姿势 JSON」仍可用于备份）";
+    toast("已连上游戏里的 mod：\n改完姿势会立刻生效（不需要资源包，也不用按 F3+T），切回游戏就能看到。", 5200);
+    scheduleAutoSync();
+  }catch(e){ /* 没装 mod 或不是通过 mod 打开的页面 —— 走资源包方式 */ }
+}
+
+async function sendToBridge(){
+  if (!bridge) return false;
+  try{
+    const r = await fetch("/api/pose", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({pose: pose, enabled: poseEnabled})
+    });
+    const j = await r.json();
+    if (j && j.ok){
+      if (typeof j.revision === "number") bridgeRev = j.revision;
+      lastPushed = pushKey();
+      autoWrites++;
+      $("stateTxt").textContent = "已连上游戏 · v" + bridge.version + " · 已同步 " + autoWrites + " 次";
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+/** 统一的"应用"入口：优先走 mod，其次走文件夹，最后提示导出 zip */
+async function applyPose(){
+  if (bridge) return await sendToBridge();
+  if (dirHandle){
+    if (poseEnabled) return await writePack();
+    // 纯资源包路线没有"开关"这一说：关闭时把全 0 写进包（数值原样留在编辑器里，启用后重写一次即恢复）
+    const backup = JSON.parse(JSON.stringify(pose));
+    BONES.forEach(b => pose[b] = ZERO());
+    const ok = await writePack();
+    BONES.forEach(b => Object.assign(pose[b], backup[b] || ZERO()));
+    return ok;
+  }
+  return false;
+}
+
+// 自动同步：改完姿势约 0.7 秒自动写入（有编辑器桥时默认开启）
+function scheduleAutoSync(){
+  if (!autoSync || (!bridge && !dirHandle)) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(async () => {
+    if (pushKey() === lastPushed) return;
+    const ok = await applyPose();
+    if (ok && !bridge){
+      autoWrites++;
+      $("stateTxt").textContent = "已连接：" + dirHandle.name + " · 已自动同步 " + autoWrites + " 次";
+    }
+  }, 700);
+}
+
+$("btnConnect").onclick = async ()=>{
+  if (!window.showDirectoryPicker){
+    toast("当前浏览器不支持直接写文件夹（请用 Chrome / Edge）。\n请改用「导出资源包 .zip」，解压到 resourcepacks 文件夹即可。", 5200);
+    return;
+  }
+  try{
+    dirHandle = await window.showDirectoryPicker({mode:"readwrite"});
+    $("led").className = "dot on";
+    $("stateTxt").textContent = "已连接：" + dirHandle.name;
+    autoWrites = 0;
+    toast("已连接资源包文件夹。\n以后点「使用」就会把姿势写进 " + PACK_NAME + " 资源包，\n游戏里按 F3+T 重载即可看到效果。\n\n想省掉每次点「使用」，可以打开「自动同步」。", 5200);
+  }catch(e){
+    if (e && e.name !== "AbortError"){          // 用户点取消不算错误
+      toast("打不开文件夹选择器：" + (e.message||e.name) +
+        "\n\n如果这个页面是双击打开的（file://），浏览器会禁用该功能。\n" +
+        "解决办法（二选一）：\n① 改用「导出资源包 .zip」，手动解压到 resourcepacks\n" +
+        "② 在本目录起个本地服务再访问：\n    python -m http.server 8731\n    然后打开 http://127.0.0.1:8731/editor/index.html", 7000);
+    }
+  }
+};
+$("btnAuto").onclick = ()=>{
+  if (!bridge && !dirHandle){
+    toast("先连上一条写入通道，自动同步才有地方可写：\n\n① 装了 mod：游戏里按 X 打开本页面即可\n② 没装 mod：点「连接游戏资源包文件夹」", 4600);
+    return;
+  }
+  autoSync = !autoSync;
+  $("btnAuto").className = autoSync ? "sel" : "";
+  $("btnAuto").textContent = "自动同步：" + (autoSync ? "开" : "关") + (bridge ? "（已连游戏）" : "");
+  if (autoSync){
+    autoWrites = 0;
+    applyPose();
+    toast(bridge ? "已打开自动同步：改一下姿势，游戏里立刻变（不用重载）。"
+                 : "已打开自动同步：改完姿势 0.7 秒后自动写入资源包。", 4200);
+  }
+};
+async function writePack(){
+  if (!dirHandle) return false;
+  const files = packFiles(slim);
+  let packDir;
+  try{ packDir = await dirHandle.getDirectoryHandle(PACK_NAME, {create:true}); }
+  catch(e){ toast("无法创建资源包文件夹：" + e.message); return false; }
+  for (const [rel, content] of Object.entries(files)){
+    const segs = rel.split("/");
+    let d = packDir;
+    for (let i=0;i<segs.length-1;i++) d = await d.getDirectoryHandle(segs[i], {create:true});
+    const fh = await d.getFileHandle(segs[segs.length-1], {create:true});
+    const w = await fh.createWritable();
+    await w.write(content); await w.close();
+  }
+  return true;
+}
+/* 模型开关按钮的样子随状态走：开着＝「关闭模型」，关着＝「启用模型」（带选中色，一眼看出当前是停用状态） */
+function updateUseUI(){
+  const o = $("btnOff");
+  if (!o) return;
+  o.innerHTML = '<svg class="ic"><use href="#ic-' + (poseEnabled ? "off" : "check") + '"/></svg>'
+              + (poseEnabled ? "关闭模型" : "启用模型");
+  o.className = poseEnabled ? "" : "sel";
+}
+
+$("btnUse").onclick = async ()=>{
+  if (!bridge && !dirHandle){
+    toast("还没有可写入的通道，二选一：\n\n① 装了「Qxiiphoto 姿势包」mod：\n   游戏里按 X（或输入 /qxp）打开本页面，就会自动连上，改完立刻生效\n\n② 没装 mod（纯资源包）：点上面「连接游戏资源包文件夹」选一次 resourcepacks，\n   或点「导出资源包 .zip」手动放进 resourcepacks", 7000);
+    return;
+  }
+  poseEnabled = true;                        // 「使用」＝应用并启用
+  updateUseUI();
+  const ok = await applyPose();
+  if (!ok){ toast("写入失败，试试「导出资源包 .zip」手动放进 resourcepacks"); return; }
+  toast(bridge
+    ? "已启用并应用 —— 游戏里立刻就是新姿势（不用重载，切回游戏就能看到）。"
+    : "已写入资源包文件夹！\n\n回游戏按 F3+T 重载即可看到姿势。", 4600);
+};
+/* 关闭模型＝暂时停用（用回原版模型），数值一律保留；按钮随即变成「启用模型」 */
+$("btnOff").onclick = async ()=>{
+  poseEnabled = !poseEnabled;
+  updateUseUI();
+  if (bridge || dirHandle) await applyPose();
+  toast(poseEnabled
+    ? "已启用模型 —— 恢复关闭前的那份姿势。"
+    : (bridge ? "已关闭模型：游戏里立刻用回原版动作，数值全部保留（点「启用模型」随时恢复）。"
+              : "已关闭模型：写进资源包的是全 0 姿势，编辑器里的数值仍然保留。"), 4600);
+};
+
+/* ---- ZIP（store 方式，无需第三方库） ---- */
+const CRC_TABLE = (()=>{ const t = new Uint32Array(256);
+  for (let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i=0;i<u8.length;i++) c = CRC_TABLE[(c^u8[i])&0xFF] ^ (c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zip(files){
+  const enc = new TextEncoder(); const chunks = []; const central = []; let offset = 0;
+  for (const [name, text] of Object.entries(files)){
+    const nameB = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true);
+    lh.setUint16(8,0,true); lh.setUint16(10,0,true); lh.setUint16(12,0,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true);
+    lh.setUint16(26,nameB.length,true); lh.setUint16(28,0,true);
+    chunks.push(new Uint8Array(lh.buffer), nameB, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true);
+    ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true); ch.setUint16(12,0,true); ch.setUint16(14,0,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true);
+    ch.setUint16(28,nameB.length,true); ch.setUint32(42,offset,true);
+    central.push(new Uint8Array(ch.buffer), nameB);
+    offset += 30 + nameB.length + data.length;
+  }
+  let cdSize = 0; for (const c of central) cdSize += c.length;
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,central.length/2,true); end.setUint16(10,central.length/2,true);
+  end.setUint32(12,cdSize,true); end.setUint32(16,offset,true);
+  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], {type:"application/zip"});
+}
+function download(blob, name){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+$("btnExport").onclick = ()=>{
+  download(zip(packFiles(slim)), PACK_NAME + ".zip");
+  toast("已导出 " + PACK_NAME + ".zip\n解压后把 " + PACK_NAME + " 文件夹放进 resourcepacks 即可。", 4200);
+};
+$("btnExportPose").onclick = ()=>{
+  download(new Blob([JSON.stringify({slim: slim, pose: pose}, null, 1)], {type:"application/json"}), "pose.json");
+  toast("已导出姿势 JSON（可在另一台机器导入）");
+};
+$("btnImportPose").onclick = ()=> $("filePose").click();
+$("filePose").onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const o = JSON.parse(r.result);
+      BONES.forEach(b=>{ if(o.pose && o.pose[b]) pose[b] = Object.assign(ZERO(), o.pose[b]); });
+      if (typeof o.slim === "boolean"){ slim = o.slim; uploadMesh(); }
+      syncUI(); toast("已导入姿势");
+    }catch(err){ toast("导入失败：" + err.message); }
+  };
+  r.readAsText(f);
+};
+/* =========================================================================
+   粘贴导入：支持三种格式（可以整段粘贴 .jpm 文件内容）
+     var.qxp_head_rx = torad(30)
+     "var.qxp_head_rx": "torad(30)"
+     head.rx = 30   /   right_arm.rx=-70   /   body.ty -2
+   ========================================================================= */
+function parsePoseText(text){
+  const found = {};
+  const re = /(?:(?:var\.)?qxp_)?([a-z_]+?)[._\s]*(rx|ry|rz|tx|ty|tz)\s*["']?\s*[:=]?\s*["']?\s*(?:torad\()?\s*(-?\d+(?:\.\d+)?)/gi;
+  let m, n = 0;
+  while ((m = re.exec(text))){
+    const bone = m[1].toLowerCase(), axis = m[2].toLowerCase(), v = parseFloat(m[3]);
+    if (BONES.indexOf(bone) < 0 || !isFinite(v)) continue;
+    if (!found[bone]) found[bone] = ZERO();
+    found[bone][axis] = v;
+    n++;
+  }
+  return {pose: found, count: n};
+}
+$("btnPaste").onclick = ()=>{ $("pasteWrap").style.display = "block"; $("pasteArea").focus(); };
+$("btnPasteCancel").onclick = ()=>{ $("pasteWrap").style.display = "none"; };
+$("pasteWrap").onclick = e=>{ if (e.target === $("pasteWrap")) $("pasteWrap").style.display = "none"; };
+$("btnPasteOk").onclick = ()=>{
+  const r = parsePoseText($("pasteArea").value || "");
+  if (!r.count){
+    toast("没解析出任何数值 —— 支持 var.qxp_head_rx = torad(30) / head.rx = 30 / 整段 .jpm 内容", 4200);
+    return;
+  }
+  pushUndo();
+  BONES.forEach(b => { if (r.pose[b]) Object.assign(pose[b], r.pose[b]); });
+  syncUI();
+  $("pasteWrap").style.display = "none";
+  toast("已导入 " + r.count + " 个数值" + (bridge ? "，正在同步到游戏…" : ""), 3000);
+};
+
+/* =========================================================================
+   双向同步：轮询游戏内姿势（游戏里按 X 改完，这边也会跟着变）
+   只读游戏、不写回；用修订号判断变化，自己推出去的不会回声
+   ========================================================================= */
+let bridgeRev = -1;
+let lastPushed = null;
+/** 推送判重：姿势和开关都要算进去，否则"只关开关、没改数值"时不会重发 */
+const pushKey = ()=> JSON.stringify({p: pose, e: poseEnabled});
+
+async function pollBridge(){
+  if (!bridge || document.hidden) return;
+  try{
+    const r = await fetch("/api/pose", {cache: "no-store"});
+    const j = await r.json();
+    if (!j || !j.ok || typeof j.revision !== "number") return;
+    if (j.revision === bridgeRev) return;
+    bridgeRev = j.revision;
+    if (Array.isArray(j.slots)) renderSlots(j.slots);        // 游戏里存/删的缓存跟着刷新
+    if (typeof j.enabled === "boolean" && j.enabled !== poseEnabled){
+      poseEnabled = j.enabled;
+      updateUseUI();
+      toast(poseEnabled ? "游戏里启用了模型" : "游戏里关闭了模型（数值保留）", 1800);
+    }
+    const remote = JSON.stringify(j.pose || {});
+    if (remote === JSON.stringify(pose)) return;
+    BONES.forEach(b => { pose[b] = Object.assign(ZERO(), (j.pose || {})[b] || {}); });
+    lastPushed = pushKey();
+    syncUI();
+    toast("已同步游戏内的修改", 1600);
+  }catch(e){}
+}
+
+$("btnCopy").onclick = async ()=>{
+  const lines = [];
+  for (const b of BONES){
+    const p = pose[b];
+    const parts = AXES6.filter(a => Math.abs(p[a]||0) > 1e-6)
+      .map(a => `${b}.${a}=${fmt(p[a])}`);
+    if (parts.length) lines.push(parts.join(" "));
+  }
+  const txt = lines.length ? lines.join("\n") : "（全部为 0，未做任何修改）";
+  try{ await navigator.clipboard.writeText(txt); toast("已复制：\n" + txt, 3400); }
+  catch(e){ toast(txt, 5000); }
+};
+
+/* =========================================================================
+   临时缓存
+   连上游戏 mod 时用游戏侧那一份（写进 config、与游戏内 GUI 共享，两边同步）；
+   没连游戏就用本机 localStorage（沿用老「预设」的存储格式，以前存的姿势照样在）
+   ========================================================================= */
+const KEY = "qxp_pose_presets_v1";
+let activeSlot = -1;                       // 最近一次启用的缓存（高亮用）
+let pendingDelete = -1;                    // 点了 × 还没二次确认的那一项
+let pendingTimer = null;
+
+const readLocal = ()=>{ try{ return JSON.parse(localStorage.getItem(KEY) || "{}"); }catch(e){ return {}; } };
+const localSlots = ()=> Object.entries(readLocal()).map(([name, p]) => ({name, pose: p}));
+
+async function slotApi(action, payload){
+  const r = await fetch("/api/slots", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(Object.assign({action}, payload || {}))
+  });
+  const j = await r.json();
+  if (j && typeof j.revision === "number") bridgeRev = j.revision;
+  if (j && Array.isArray(j.slots)) renderSlots(j.slots);
+  return j;
+}
+
+function renderSlots(slots){
+  const row = $("slotRow"); if (!row) return;
+  row.innerHTML = "";
+  const note = $("slotNote");
+  if (note) note.textContent = bridge
+    ? "点名字＝应用并启用 · ⟳＝用当前姿势覆盖 · ×＝删除（当前＝游戏侧缓存，与游戏内 GUI 共享）"
+    : "点名字＝应用并启用 · ⟳＝用当前姿势覆盖 · ×＝删除（当前＝本机缓存；连上游戏后与游戏内共享）";
+  if (!slots.length){
+    row.innerHTML = '<span class="note">暂无缓存 —— 调好姿势点下面「存为缓存」，之后一键换回</span>';
+    return;
+  }
+  slots.forEach((s, i)=>{
+    const wrap = document.createElement("span");
+    wrap.className = "chip" + (bridge && i === activeSlot ? " sel" : "")
+                           + (pendingDelete === i ? " danger" : "");
+
+    const b = document.createElement("button");
+    b.className = "cname";
+    b.textContent = (pendingDelete === i) ? ("删「" + s.name + "」？点 × 确认") : s.name;
+    b.title = (pendingDelete === i) ? "点击取消删除" : "点击＝应用并启用";
+    b.onclick = async ()=>{
+      if (pendingDelete === i){ pendingDelete = -1; renderSlots(slots); return; }   // 点名字＝取消删除
+      pushUndo();
+      BONES.forEach(k => pose[k] = Object.assign(ZERO(), s.pose[k] || {}));
+      poseEnabled = true;
+      activeSlot = i;
+      syncUI(); updateUseUI(); renderSlots(slots);
+      if (bridge) await slotApi("apply", {index: i});
+      else if (dirHandle) await applyPose();
+      toast("已启用缓存：" + s.name, 2000);
+    };
+
+    const ow = document.createElement("button");
+    ow.className = "cmini"; ow.textContent = "⟳"; ow.title = "用当前姿势覆盖这个缓存";
+    ow.onclick = async ()=>{
+      pendingDelete = -1;
+      if (bridge){ await slotApi("overwrite", {index: i}); toast("已覆盖：" + s.name, 1800); }
+      else {
+        const p = readLocal(); p[s.name] = JSON.parse(JSON.stringify(pose));
+        localStorage.setItem(KEY, JSON.stringify(p));
+        renderSlots(localSlots());
+        toast("已覆盖：" + s.name, 1800);
+      }
+    };
+
+    // 删除要按两次（第一次变成"待删除"，3 秒内再点一次才真删）—— 不用原生 confirm
+    const del = document.createElement("button");
+    del.className = "cmini"; del.textContent = "×"; del.title = "删除这个缓存（需点两次）";
+    del.onclick = async ev => {
+      ev.stopPropagation();
+      if (pendingDelete !== i){
+        pendingDelete = i;
+        clearTimeout(pendingTimer);
+        pendingTimer = setTimeout(()=>{ pendingDelete = -1; renderSlots(slots); }, 3000);
+        renderSlots(slots);
+        toast("再点一次 × 确认删除「" + s.name + "」（点名字可取消）", 2600);
+        return;
+      }
+      pendingDelete = -1;
+      clearTimeout(pendingTimer);
+      if (bridge) await slotApi("delete", {index: i});
+      else {
+        const p = readLocal(); delete p[s.name];
+        localStorage.setItem(KEY, JSON.stringify(p));
+        renderSlots(localSlots());
+      }
+      toast("已删除：" + s.name, 1800);
+    };
+
+    wrap.append(b, ow, del);
+    row.appendChild(wrap);
+  });
+}
+
+$("btnSaveSlot").onclick = async ()=>{
+  const nameEl = $("slotName");
+  const typed = ((nameEl && nameEl.value) || "").trim();
+  if (bridge){
+    const j = await slotApi("save", typed ? {name: typed} : {});
+    if (j && j.ok){
+      const list = j.slots || [];
+      toast("已存为缓存：" + (((list[list.length - 1] || {}).name) || typed || ""), 2200);
+      if (nameEl) nameEl.value = "";
+    } else {
+      toast("游戏里缓存已满（上限 12 个）—— 删掉几个再存", 3000);
+    }
+    return;
+  }
+  const n = typed || ("缓存 " + (Object.keys(readLocal()).length + 1));
+  const p = readLocal(); p[n] = JSON.parse(JSON.stringify(pose));
+  localStorage.setItem(KEY, JSON.stringify(p));
+  renderSlots(localSlots());
+  if (nameEl) nameEl.value = "";
+  toast("已存为缓存：" + n, 2200);
+};
+
+/* =========================================================================
+   9. 启动
+   ========================================================================= */
+resize();
+loadPose();                 // 恢复上次编辑到一半的姿势（localStorage）
+loadStoredSkin();           // 恢复上次用过的皮肤
+uploadMesh();
+buildGizmoMesh();
+buildGrid();
+buildPartRow();
+buildSliders();
+renderSlots(localSlots());   // 临时缓存（连上游戏后会自动换成游戏侧那份）
+document.title = "Qxiiphoto 姿势编辑器 v" + EDITOR_VERSION;
+{ const st = $("stateTxt"); if (st && !bridge) st.textContent = "未连游戏（编辑器 v" + EDITOR_VERSION + "）"; }
+UNDO.stack.push(snapShot());
+detectBridge();             // 页面若由「编辑器桥」mod 提供，则走 mod 通道（免文件夹、免 F3+T）
+draw();
+</script>
+</body>
+</html>

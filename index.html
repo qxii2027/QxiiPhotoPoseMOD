@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qxiiphoto 姿势包 · 下载</title>
+<style>
+  /* 与编辑器同一套 Spline 风格令牌：纯黑虚空、半透明白做层次、12/24/胶囊圆角、
+     字重不超过 500、饱和色只有主按钮的 Spline 蓝 #0062ff */
+  :root{
+    --void:#030305;
+    --glass:rgba(255,255,255,.055);
+    --surf:rgba(255,255,255,.13);
+    --surf-hi:rgba(255,255,255,.22);
+    --surf-lo:rgba(255,255,255,.07);
+    --hair:rgba(255,255,255,.07);
+    --sheen:inset 0 1px 0 rgba(255,255,255,.07);
+    --ring:inset 0 0 0 1px rgba(255,255,255,.24);
+    --txt:#fff; --txt-dim:rgba(255,255,255,.7); --txt-faint:rgba(255,255,255,.45);
+    --blue:#0062ff; --blue-hi:#2a7bff; --glow:0 10px 30px rgba(0,98,255,.35);
+    --ok:#3ddc97;
+    --r-s:10px; --r-m:12px; --r-l:24px; --pill:999px;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--void);color:var(--txt);
+    font-family:"Spline Sans",Inter,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    font-size:14px;line-height:1.65;font-weight:400;-webkit-font-smoothing:antialiased}
+  /* 虚空柔光：只作为光，不作为 UI 颜色 */
+  .glow{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(38% 30% at 22% 8%, rgba(0,98,255,.20), rgba(0,98,255,0) 68%),
+      radial-gradient(30% 26% at 82% 22%, rgba(168,85,247,.12), rgba(168,85,247,0) 70%)}
+  .wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;padding:0 20px 64px}
+
+  /* 顶栏：悬浮玻璃条 */
+  nav{position:sticky;top:12px;z-index:10;display:flex;justify-content:space-between;align-items:center;
+    gap:12px;margin:12px 0 0;padding:10px 16px;border-radius:var(--r-l);
+    background:var(--glass);backdrop-filter:saturate(140%) blur(22px);box-shadow:var(--sheen)}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:500}
+  .brand svg{width:18px;height:18px;stroke:var(--blue-hi);fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .tag{font-size:11.5px;color:var(--txt-dim);font-family:var(--mono);padding:3px 12px;
+    border-radius:var(--pill);background:var(--surf-lo)}
+
+  /* 头部 */
+  header{padding:56px 0 8px;text-align:center}
+  h1{margin:0 0 14px;font-size:clamp(26px,4.4vw,42px);line-height:1.25;font-weight:500;letter-spacing:-.01em}
+  h1 em{font-style:normal;color:var(--blue-hi)}
+  .sub{margin:0 auto;max-width:660px;color:var(--txt-dim);font-size:15px}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:28px 0 14px}
+  .meta{color:var(--txt-faint);font-size:12.5px;font-family:var(--mono)}
+
+  /* 按钮：半透明白填充无描边；主按钮才是 Spline 蓝 */
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:var(--r-m);
+    background:var(--surf);color:var(--txt);text-decoration:none;font-size:14px;font-weight:500;
+    box-shadow:var(--sheen);transition:background .14s ease,transform .06s ease,box-shadow .14s ease;cursor:pointer}
+  .btn:hover{background:var(--surf-hi)}
+  .btn:active{transform:scale(.985)}
+  .btn.primary{background:var(--blue);box-shadow:var(--glow)}
+  .btn.primary:hover{background:var(--blue-hi)}
+  .btn small{font-weight:400;color:rgba(255,255,255,.75)}
+  .btn.primary small{color:rgba(255,255,255,.85)}
+  .btn svg{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.7;fill:none;
+    stroke-linecap:round;stroke-linejoin:round}
+
+  /* 卡片 */
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:44px}
+  .card{background:var(--glass);border-radius:var(--r-l);padding:22px;box-shadow:var(--sheen);
+    backdrop-filter:saturate(140%) blur(18px)}
+  .card h2{margin:0 0 12px;font-size:13px;font-weight:500;color:var(--txt-faint);letter-spacing:.12em}
+  .card p{margin:0 0 10px;color:var(--txt-dim);font-size:13.5px}
+  .card p:last-child{margin-bottom:0}
+  .dl{display:flex;flex-direction:column;gap:10px}
+  .dl .btn{justify-content:center}
+  .files{margin-top:10px;font-size:11.5px;font-family:var(--mono);color:var(--txt-faint);
+    display:flex;justify-content:space-between;gap:10px}
+  ol,ul{margin:0;padding-left:20px;color:var(--txt-dim);font-size:13.5px}
+  li{margin:4px 0}
+  code{font-family:var(--mono);font-size:12px;background:var(--surf-lo);padding:2px 7px;border-radius:var(--pill)}
+  .rowline{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--hair);font-size:13.5px}
+  .rowline:first-of-type{border-top:0}
+  .rowline b{font-weight:500}
+  .rowline span{color:var(--txt-dim);text-align:right}
+  .sec{margin-top:44px}
+  .hintline{color:var(--txt-faint);font-size:12.5px;margin:-4px 0 14px}
+  .sec > h2{margin:0 0 14px;font-size:20px;font-weight:500}
+  .hash{font-family:var(--mono);font-size:11.5px;color:var(--txt-faint);word-break:break-all;margin-top:6px}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--hair);
+    color:var(--txt-faint);font-size:12px;text-align:center}
+  a{color:var(--blue-hi)}
+  .warn{color:rgba(255,255,255,.85)}
+  @media (max-width:640px){
+    header{padding-top:34px}
+    nav{top:8px}
+    .btn{width:100%;justify-content:center}
+  }
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<div class="wrap">
+  <nav>
+    <div class="brand">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.2" r="2.4"/><path d="M3.4 13.4c0-2.4 2.1-3.9 4.6-3.9s4.6 1.5 4.6 3.9"/></svg>
+      <span>Qxiiphoto 姿势包</span>
+    </div>
+    <span class="tag">v3.11.0 · MC 1.21.11</span>
+  </nav>
+
+  <header>
+    <h1>给玩家模型一套<br><em>可自由调整的骨骼</em></h1>
+    <p class="sub">头 / 身体 / 双手 / 双脚都能平移 + 旋转；皮肤第二层、四件盔甲、主副手持物<b>全部自动跟随</b>。
+      在游戏里按 <b>X</b> 打开编辑器，拖完立刻生效 —— 不需要资源包，也不用按 F3+T。</p>
+    <div class="cta">
+      <a class="btn primary" href="qxii-posemod-3.11.0.jar" download="qxii-posemod-3.11.0.jar">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.4v7"/><path d="M5.6 6.9L8 9.3l2.4-2.4"/><path d="M2.6 12.4h10.8"/></svg>
+        下载 mod <small>85.9 KB</small>
+      </a>
+      <a class="btn" href="#routes">其它下载方式</a>
+    </div>
+    <p class="meta">客户端 mod · Fabric · 需要 Fabric API · 不装服务端</p>
+  </header>
+
+  <section class="grid">
+    <div class="card">
+      <h2>运行环境</h2>
+      <div class="rowline"><b>Minecraft Java 版</b><span>1.21.11（必须匹配）</span></div>
+      <div class="rowline"><b>Fabric Loader</b><span>≥ 0.19.0</span></div>
+      <div class="rowline"><b>Fabric API</b><span>1.21.11 版本（必需）</span></div>
+      <div class="rowline"><b>Java</b><span>21+（启动器自带）</span></div>
+      <div class="rowline"><b>不需要</b><span>资源包 / EMF / ETF</span></div>
+    </div>
+
+    <div class="card">
+      <h2>三步装好</h2>
+      <ol>
+        <li>装好 <b>Fabric Loader</b>（选 1.21.11）与 <b>Fabric API</b></li>
+        <li>把下载的 <code>qxii-posemod-3.11.0.jar</code> 放进 <code>.minecraft/mods/</code></li>
+        <li>启动游戏，按 <b>X</b> 打开姿势编辑器（键位可在「选项 → 控制」改）</li>
+      </ol>
+      <p>同一台电脑上，Fabric API 与本 mod 的 jar 不能重复放两份，否则会报重复模组。</p>
+    </div>
+
+    <div class="card">
+      <h2>游戏里能做什么</h2>
+      <ul>
+        <li>六个部件 × 六个轴：拖滑块或直接拖预览里的角色</li>
+        <li><b>关闭模型</b>＝暂时用回原版动作，数值全部保留；点「启用模型」恢复</li>
+        <li><b>临时缓存</b>：把当前姿势存成多份，点一下换回来（最多 12 份）</li>
+        <li>右下角「打开web端」＝浏览器里的进阶编辑器，两边数值互通</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="sec" id="routes">
+    <h2>选择下载</h2>
+    <p class="hintline">如果是在浏览器里直接双击打开本页（file://），个别浏览器会拦截本地文件下载：
+     点了没反应时，对着按钮 <b>右键 → 链接另存为</b> 即可；也可以直接到本页所在的文件夹里复制文件。</p>
+    <div class="grid">
+      <div class="card">
+        <h2>① mod（推荐）</h2>
+        <p>全部功能、全部兼容补丁；游戏里按 X 就是编辑器，网页端由 mod 自带（无需联网）。</p>
+        <div class="dl">
+          <a class="btn primary" href="qxii-posemod-3.11.0.jar" download="qxii-posemod-3.11.0.jar">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.4v7"/><path d="M5.6 6.9L8 9.3l2.4-2.4"/><path d="M2.6 12.4h10.8"/></svg>
+            下载 qxii-posemod-3.11.0.jar
+          </a>
+        </div>
+        <div class="files"><span>85.9 KB</span><span>SHA256 见下</span></div>
+        <p class="hash">97dc9d0f3913a94731bd4b9a3cb5cbef165516f9cd57718628c588efcd7b7b59</p>
+      </div>
+
+      <div class="card">
+        <h2>② 资源包（备选）</h2>
+        <p>不想装 mod 时的路线：需要前置 <b>EMF + ETF</b>，把 zip 放进 <code>resourcepacks</code> 并在游戏里启用，
+          改完姿势要按 <b>F3+T</b> 重载。功能和兼容补丁比 mod 少一些。</p>
+        <div class="dl">
+          <a class="btn" href="QxiiphotoPose.zip" download="QxiiphotoPose.zip">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.4v7"/><path d="M5.6 6.9L8 9.3l2.4-2.4"/><path d="M2.6 12.4h10.8"/></svg>
+            下载 QxiiphotoPose.zip
+          </a>
+        </div>
+        <div class="files"><span>5.8 KB</span><span>EMF + ETF 前置</span></div>
+        <p class="hash">dc5a4f4691ae55aab3c9e647e2bb3ac305a942dcb92b27105abb5690369c2e88</p>
+      </div>
+
+      <div class="card">
+        <h2>③ 网页编辑器（单文件）</h2>
+        <p>不装任何东西也能先玩：双击打开就是完整编辑器（带手柄、镜像、贴图预览）。
+          想让改动直接进游戏，就在游戏里按 X → 「打开web端」用 mod 自带的那份。</p>
+        <div class="dl">
+          <a class="btn" href="qxp-editor-3.11.0.html" download="qxp-editor-3.11.0.html">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.4v7"/><path d="M5.6 6.9L8 9.3l2.4-2.4"/><path d="M2.6 12.4h10.8"/></svg>
+            下载 qxp-editor-3.11.0.html
+          </a>
+          <a class="btn" href="qxp-editor-3.11.0.html" target="_blank" rel="noreferrer">在浏览器里直接打开</a>
+        </div>
+        <div class="files"><span>84.6 KB</span><span>单文件 · 无需安装</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>上手前先知道</h2>
+    <div class="card">
+      <ul>
+        <li><b>版本必须精确匹配 1.21.11</b>：Fabric 模组和游戏版本强绑定，换版本要重新编译。</li>
+        <li><b>别同时开其它「玩家模型」资源包</b>（FA+Player / Polaris / DetailedAnimations 等），会和本 mod 叠加渲染；本 mod 不走资源包，正确做法是把它们关掉。</li>
+        <li><b>这是客户端 mod</b>：只改你自己的画面，别人看到的还是原版模型；多人服务器不用装任何东西。</li>
+        <li><b>数值存在哪</b>：<code>config/qxp_pose.json</code>（姿势、模型开关、临时缓存都在里面），重启游戏依然在。</li>
+        <li><b>装完怎么确认</b>：游戏里输入 <code>/qxp status</code>，会打印版本、模型开关、缓存数量与补丁状态。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>文件校验</h2>
+    <div class="card">
+      <div class="rowline"><b>qxii-posemod-3.11.0.jar</b><span>85.9 KB</span></div>
+      <p class="hash">97dc9d0f3913a94731bd4b9a3cb5cbef165516f9cd57718628c588efcd7b7b59</p>
+      <div class="rowline"><b>QxiiphotoPose.zip</b><span>5.8 KB</span></div>
+      <p class="hash">dc5a4f4691ae55aab3c9e647e2bb3ac305a942dcb92b27105abb5690369c2e88</p>
+      <div class="rowline"><b>qxp-editor-3.11.0.html</b><span>84.6 KB</span></div>
+      <p class="hash">3047abdae5c19efc3b28a18811450e77ecf2b2fc5cf1cb5687d6e3a4425d2867</p>
+      <p class="warn">下载后可以用 <code>certutil -hashfile 文件名 SHA256</code>（Windows）或 <code>shasum -a 256 文件名</code>（macOS / Linux）核对。</p>
+    </div>
+  </section>
+
+  <footer>
+    Qxiiphoto 姿势包 v3.11.0 · 生成于 2026-10-02 · MIT 许可 · 个人项目，请勿用于商业分发<br>
+    Minecraft 是 Mojang 的商标，本项目与 Mojang 无关。
+  </footer>
+</div>
+</body>
+</html>
